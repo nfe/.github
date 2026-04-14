@@ -1,0 +1,38 @@
+name: Validate .NET solution
+
+on:
+  workflow_call:
+    inputs:
+      solution:
+        description: "Path to the .sln file to build and test"
+        required: true
+        type: string
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        env:
+          GITHUB_USERNAME: ${{ github.actor }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dotnet restore "${{ inputs.solution }}"
+
+      - name: Build
+        run: dotnet build "${{ inputs.solution }}" --no-restore -c Release
+
+      - name: Test
+        run: dotnet test "${{ inputs.solution }}" --no-build -c Release --logger "console;verbosity=minimal"

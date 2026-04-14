@@ -18,59 +18,38 @@ on:
         default: "20"
 
 jobs:
-  validate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  dotnet:
+    if: contains(inputs.stacks, 'dotnet')
     permissions:
       contents: read
       packages: read
+    uses: nfe/.github/.github/workflows/validate-dotnet.yml@main
+    with:
+      solution: ${{ inputs.dotnet-solution }}
 
+  node:
+    if: contains(inputs.stacks, 'node')
+    permissions:
+      contents: read
+      packages: read
+    uses: nfe/.github/.github/workflows/validate-node.yml@main
+    with:
+      node-version: ${{ inputs.node-version }}
+
+  summary:
+    needs: [dotnet, node]
+    if: always()
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # --- .NET ---
-      - name: Setup .NET SDK
-        if: contains(inputs.stacks, 'dotnet')
-        uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: global.json
-
-      - name: Restore (.NET)
-        if: contains(inputs.stacks, 'dotnet')
-        env:
-          GITHUB_USERNAME: ${{ github.actor }}
-          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: dotnet restore "${{ inputs.dotnet-solution }}"
-
-      - name: Build (.NET)
-        if: contains(inputs.stacks, 'dotnet')
-        run: dotnet build "${{ inputs.dotnet-solution }}" --no-restore -c Release
-
-      - name: Test (.NET)
-        if: contains(inputs.stacks, 'dotnet')
-        run: dotnet test "${{ inputs.dotnet-solution }}" --no-build -c Release --logger "console;verbosity=minimal"
-
-      # --- Node ---
-      - name: Setup Node.js
-        if: contains(inputs.stacks, 'node')
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ inputs.node-version }}
-          cache: npm
-
-      - name: Install dependencies (Node)
-        if: contains(inputs.stacks, 'node')
-        run: npm ci
-
-      - name: Lint (Node)
-        if: contains(inputs.stacks, 'node')
-        run: npm run lint --if-present
-
-      - name: Build (Node)
-        if: contains(inputs.stacks, 'node')
-        run: npm run build --if-present
-
-      - name: Test (Node)
-        if: contains(inputs.stacks, 'node')
-        run: npm test --if-present
+      - name: Check results
+        run: |
+          fail=0
+          for r in "${{ needs.dotnet.result }}" "${{ needs.node.result }}"; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then fail=1; fi
+          done
+          if [[ "$fail" -eq 0 ]]; then
+            echo "All stack validations passed"
+          else
+            echo "One or more stack validations failed"
+            exit 1
+          fi
