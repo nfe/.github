@@ -1,0 +1,77 @@
+name: Publish NuGet package
+
+on:
+  workflow_call:
+    inputs:
+      projectPath:
+        description: "Path to the .csproj file to publish"
+        required: true
+        type: string
+      tagPrefix:
+        description: "Tag prefix (e.g., 'foundation-v') used to extract the version from the release tag"
+        required: true
+        type: string
+
+jobs:
+  publish:
+    name: Publish ${{ github.event.release.tag_name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    env:
+      ARTIFACTS: ./artifacts
+      GH_PACKAGES_URL: https://nuget.pkg.github.com/nfe/index.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#${{ inputs.tagPrefix }}}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::Invalid version extracted from tag '$GITHUB_REF_NAME' (prefix '${{ inputs.tagPrefix }}'): '$VERSION'"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Restore
+        run: dotnet restore "${{ inputs.projectPath }}"
+
+      - name: Build
+        run: |
+          dotnet build "${{ inputs.projectPath }}" \
+            --no-restore \
+            -c Release \
+            /p:Version=${{ steps.version.outputs.version }} \
+            /p:GeneratePackageOnBuild=false \
+            /p:Deterministic=true
+
+      - name: Pack
+        run: |
+          dotnet pack "${{ inputs.projectPath }}" \
+            --no-build \
+            -c Release \
+            -o "$ARTIFACTS" \
+            /p:Version=${{ steps.version.outputs.version }}
+
+      - name: Push to GitHub Packages
+        run: |
+          dotnet nuget push "$ARTIFACTS/*.nupkg" \
+            --source "$GH_PACKAGES_URL" \
+            --api-key "${{ secrets.GITHUB_TOKEN }}" \
+            --skip-duplicate
+
+      - name: Attach .nupkg to Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" "$ARTIFACTS"/*.nupkg --clobber
