@@ -1,0 +1,55 @@
+name: Validate
+
+on:
+  workflow_call:
+    inputs:
+      stacks:
+        description: "Comma-separated stacks to validate (e.g., 'dotnet' or 'dotnet,node')"
+        required: true
+        type: string
+      dotnet-solution:
+        description: "(dotnet) Path to the .sln file"
+        required: false
+        type: string
+      node-version:
+        description: "(node) Node.js version"
+        required: false
+        type: string
+        default: "20"
+
+jobs:
+  dotnet:
+    if: contains(inputs.stacks, 'dotnet')
+    permissions:
+      contents: read
+      packages: read
+    uses: nfe/.github/.github/workflows/validate-dotnet.yml@main
+    with:
+      solution: ${{ inputs.dotnet-solution }}
+
+  node:
+    if: contains(inputs.stacks, 'node')
+    permissions:
+      contents: read
+      packages: read
+    uses: nfe/.github/.github/workflows/validate-node.yml@main
+    with:
+      node-version: ${{ inputs.node-version }}
+
+  summary:
+    needs: [dotnet, node]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          fail=0
+          for r in "${{ needs.dotnet.result }}" "${{ needs.node.result }}"; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then fail=1; fi
+          done
+          if [[ "$fail" -eq 0 ]]; then
+            echo "All stack validations passed"
+          else
+            echo "One or more stack validations failed"
+            exit 1
+          fi
