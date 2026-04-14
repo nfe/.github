@@ -4,11 +4,12 @@ on:
   workflow_call:
     inputs:
       stacks:
-        description: "Comma-separated stacks to validate (e.g., 'dotnet' or 'dotnet,node')"
-        required: true
+        description: "Comma-separated stacks (e.g., 'dotnet' or 'dotnet,node'). Leave empty to auto-detect (used by Required Workflow invocations)."
+        required: false
         type: string
+        default: ""
       dotnet-solution:
-        description: "(dotnet) Path to the .sln file"
+        description: "(dotnet) Path to the .sln file. Auto-detects the first .sln if empty."
         required: false
         type: string
       node-version:
@@ -16,19 +17,54 @@ on:
         required: false
         type: string
         default: "20"
+  pull_request:
+    branches: [main]
 
 jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      stacks: ${{ steps.d.outputs.stacks }}
+      dotnet-solution: ${{ steps.d.outputs.dotnet-solution }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: d
+        shell: bash
+        run: |
+          stacks="${{ inputs.stacks }}"
+          if [[ -z "$stacks" ]]; then
+            detected=""
+            if ls *.sln 2>/dev/null | grep -q .; then
+              detected="dotnet"
+            fi
+            if [[ -f package.json ]]; then
+              detected="${detected:+$detected,}node"
+            fi
+            stacks="$detected"
+          fi
+          echo "stacks=$stacks" >> "$GITHUB_OUTPUT"
+
+          sln="${{ inputs.dotnet-solution }}"
+          if [[ -z "$sln" && "$stacks" == *dotnet* ]]; then
+            sln=$(ls *.sln 2>/dev/null | head -1)
+          fi
+          echo "dotnet-solution=$sln" >> "$GITHUB_OUTPUT"
+
+          echo "::notice::Validating stacks: ${stacks:-(none detected)}"
+
   dotnet:
-    if: contains(inputs.stacks, 'dotnet')
+    needs: detect
+    if: contains(needs.detect.outputs.stacks, 'dotnet')
     permissions:
       contents: read
       packages: read
     uses: nfe/.github/.github/workflows/validate-dotnet.yml@main
     with:
-      solution: ${{ inputs.dotnet-solution }}
+      solution: ${{ needs.detect.outputs.dotnet-solution }}
 
   node:
-    if: contains(inputs.stacks, 'node')
+    needs: detect
+    if: contains(needs.detect.outputs.stacks, 'node')
     permissions:
       contents: read
       packages: read
@@ -37,7 +73,7 @@ jobs:
       node-version: ${{ inputs.node-version }}
 
   summary:
-    needs: [dotnet, node]
+    needs: [detect, dotnet, node]
     if: always()
     runs-on: ubuntu-latest
     steps:
