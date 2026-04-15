@@ -342,13 +342,32 @@ jobs:
           APP_NAME: ${{ steps.manifest.outputs.appName }}
         run: |
           $deadline = (Get-Date).AddSeconds(${{ inputs.healthCheckTimeoutSec }})
+          $pollIntervalSec = [double]${{ inputs.runnerPollIntervalSec }}
+          $state = 'Unknown'
 
-          do {
-            Start-Sleep -Seconds ${{ inputs.runnerPollIntervalSec }}
-            $health = Get-ServiceFabricApplicationHealth -ApplicationName $env:APP_NAME -ErrorAction SilentlyContinue
-            $state = if ($health) { $health.AggregatedHealthState } else { 'Unknown' }
-            Write-Host "AggregatedHealthState=$state"
-          } while ($state -ne 'Ok' -and (Get-Date) -lt $deadline)
+          while ($true) {
+            try {
+              $health = Get-ServiceFabricApplicationHealth -ApplicationName $env:APP_NAME -ErrorAction Stop
+              $state = $health.AggregatedHealthState
+              Write-Host "AggregatedHealthState=$state"
+            } catch {
+              $msg = $_.Exception.Message
+              if ($msg -match 'ApplicationNotFound|not found|does not exist') {
+                $state = 'Unknown'
+                Write-Host "Application not available yet: $msg"
+              } else {
+                Write-Error "Failed to query application health: $msg"
+                throw
+              }
+            }
+
+            if ($state -eq 'Ok') { break }
+
+            $remainingSec = ($deadline - (Get-Date)).TotalSeconds
+            if ($remainingSec -le 0) { break }
+
+            Start-Sleep -Seconds ([Math]::Min($pollIntervalSec, $remainingSec))
+          }
 
           if ($state -ne 'Ok') {
             throw "Application did not reach healthy state within ${{ inputs.healthCheckTimeoutSec }}s (last: $state)"
