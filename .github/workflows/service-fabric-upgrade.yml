@@ -203,7 +203,7 @@ jobs:
           APP_VERSION: ${{ needs.build.outputs.version }}
         run: Expand-Archive -Path "sfapp-$env:APP_VERSION.zip" -DestinationPath "sfapp"
 
-      - name: Install cluster certificate
+      - name: Install cluster certificate and prepare connect helper
         shell: pwsh
         env:
           CERT_B64: ${{ secrets.SF_CLUSTER_CERT_PFX_BASE64 }}
@@ -214,13 +214,14 @@ jobs:
           $password = ConvertTo-SecureString -String $env:CERT_PASSWORD -AsPlainText -Force
           $cert = Import-PfxCertificate -FilePath "$env:RUNNER_TEMP/sfcluster.pfx" -CertStoreLocation Cert:\CurrentUser\My -Password $password
           "THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SF_ENDPOINT=${{ vars.SF_CLUSTER_ENDPOINT }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SF_SERVER_CERT_THUMBPRINT=${{ vars.SF_CLUSTER_SERVER_CERT_THUMBPRINT }}" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Connect to cluster
-        shell: pwsh
-        env:
-          SF_ENDPOINT: ${{ vars.SF_CLUSTER_ENDPOINT }}
-          SF_SERVER_CERT_THUMBPRINT: ${{ vars.SF_CLUSTER_SERVER_CERT_THUMBPRINT }}
-        run: |
+          # Write a Connect helper that every subsequent SF step dot-sources.
+          # PowerShell session state doesn't persist across GitHub Actions
+          # steps, so each SF cmdlet step must re-establish the cluster
+          # connection in its own process.
+          @'
           Connect-ServiceFabricCluster `
             -ConnectionEndpoint $env:SF_ENDPOINT `
             -X509Credential `
@@ -228,7 +229,8 @@ jobs:
             -FindValue $env:THUMBPRINT `
             -StoreLocation CurrentUser `
             -StoreName My `
-            -ServerCertThumbprint $env:SF_SERVER_CERT_THUMBPRINT
+            -ServerCertThumbprint $env:SF_SERVER_CERT_THUMBPRINT | Out-Null
+          '@ | Set-Content -Path "$env:RUNNER_TEMP/sf-connect.ps1"
 
       - name: Load manifests
         id: manifest
@@ -268,6 +270,7 @@ jobs:
         env:
           APP_NAME: ${{ steps.manifest.outputs.appName }}
         run: |
+          . $env:RUNNER_TEMP/sf-connect.ps1
           try {
             $previous = Get-ServiceFabricApplication -ApplicationName $env:APP_NAME -ErrorAction Stop
           } catch {
@@ -308,6 +311,7 @@ jobs:
           APP_TYPE_VERSION: ${{ steps.manifest.outputs.appTypeVersion }}
           APP_PKG_DIR: ${{ steps.manifest.outputs.appPackageDir }}
         run: |
+          . $env:RUNNER_TEMP/sf-connect.ps1
           $imageStorePath = "$env:APP_TYPE_NAME`_$env:APP_TYPE_VERSION"
           Copy-ServiceFabricApplicationPackage `
             -ApplicationPackagePath $env:APP_PKG_DIR `
@@ -321,6 +325,7 @@ jobs:
         id: register
         shell: pwsh
         run: |
+          . $env:RUNNER_TEMP/sf-connect.ps1
           Register-ServiceFabricApplicationType `
             -ApplicationPathInImageStore $env:IMAGE_STORE_PATH `
             -TimeoutSec ${{ inputs.registerTimeoutSec }}
@@ -336,6 +341,7 @@ jobs:
           APP_TYPE_VERSION: ${{ steps.manifest.outputs.appTypeVersion }}
           APP_PARAMS_JSON: ${{ steps.manifest.outputs.appParametersJson }}
         run: |
+          . $env:RUNNER_TEMP/sf-connect.ps1
           $params = ConvertFrom-Json $env:APP_PARAMS_JSON
           $hash = @{}
           foreach ($p in $params.PSObject.Properties) { $hash[$p.Name] = $p.Value }
@@ -356,6 +362,7 @@ jobs:
           APP_TYPE_VERSION: ${{ steps.manifest.outputs.appTypeVersion }}
           APP_PARAMS_JSON: ${{ steps.manifest.outputs.appParametersJson }}
         run: |
+          . $env:RUNNER_TEMP/sf-connect.ps1
           $params = ConvertFrom-Json $env:APP_PARAMS_JSON
           $hash = @{}
           foreach ($p in $params.PSObject.Properties) { $hash[$p.Name] = $p.Value }
@@ -405,7 +412,7 @@ jobs:
       contents: read
 
     steps:
-      - name: Install cluster certificate
+      - name: Install cluster certificate and prepare connect helper
         shell: pwsh
         env:
           CERT_B64: ${{ secrets.SF_CLUSTER_CERT_PFX_BASE64 }}
@@ -416,13 +423,10 @@ jobs:
           $password = ConvertTo-SecureString -String $env:CERT_PASSWORD -AsPlainText -Force
           $cert = Import-PfxCertificate -FilePath "$env:RUNNER_TEMP/sfcluster.pfx" -CertStoreLocation Cert:\CurrentUser\My -Password $password
           "THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SF_ENDPOINT=${{ vars.SF_CLUSTER_ENDPOINT }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SF_SERVER_CERT_THUMBPRINT=${{ vars.SF_CLUSTER_SERVER_CERT_THUMBPRINT }}" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Connect to cluster
-        shell: pwsh
-        env:
-          SF_ENDPOINT: ${{ vars.SF_CLUSTER_ENDPOINT }}
-          SF_SERVER_CERT_THUMBPRINT: ${{ vars.SF_CLUSTER_SERVER_CERT_THUMBPRINT }}
-        run: |
+          @'
           Connect-ServiceFabricCluster `
             -ConnectionEndpoint $env:SF_ENDPOINT `
             -X509Credential `
@@ -430,7 +434,8 @@ jobs:
             -FindValue $env:THUMBPRINT `
             -StoreLocation CurrentUser `
             -StoreName My `
-            -ServerCertThumbprint $env:SF_SERVER_CERT_THUMBPRINT
+            -ServerCertThumbprint $env:SF_SERVER_CERT_THUMBPRINT | Out-Null
+          '@ | Set-Content -Path "$env:RUNNER_TEMP/sf-connect.ps1"
 
       - name: Remove application
         if: needs.deploy.outputs.isCreated == 'true'
@@ -438,7 +443,9 @@ jobs:
         continue-on-error: true
         env:
           APP_NAME: ${{ needs.deploy.outputs.appName }}
-        run: Remove-ServiceFabricApplication -ApplicationName $env:APP_NAME -ForceRemove -Force
+        run: |
+          . $env:RUNNER_TEMP/sf-connect.ps1
+          Remove-ServiceFabricApplication -ApplicationName $env:APP_NAME -ForceRemove -Force
 
       - name: Downgrade application
         if: needs.deploy.outputs.isUpgrade == 'true'
@@ -449,6 +456,7 @@ jobs:
           PREV_VERSION: ${{ needs.deploy.outputs.previousAppTypeVersion }}
           PREV_PARAMS_JSON: ${{ needs.deploy.outputs.previousAppParametersJson }}
         run: |
+          . $env:RUNNER_TEMP/sf-connect.ps1
           $app = Get-ServiceFabricApplication -ApplicationName $env:APP_NAME
 
           if ($app.ApplicationStatus -eq 'Upgrading') {
@@ -478,7 +486,9 @@ jobs:
         env:
           APP_TYPE_NAME: ${{ needs.deploy.outputs.appTypeName }}
           APP_TYPE_VERSION: ${{ needs.deploy.outputs.appTypeVersion }}
-        run: Unregister-ServiceFabricApplicationType -ApplicationTypeName $env:APP_TYPE_NAME -ApplicationTypeVersion $env:APP_TYPE_VERSION -Force
+        run: |
+          . $env:RUNNER_TEMP/sf-connect.ps1
+          Unregister-ServiceFabricApplicationType -ApplicationTypeName $env:APP_TYPE_NAME -ApplicationTypeVersion $env:APP_TYPE_VERSION -Force
 
       - name: Cleanup certificate
         if: always()
