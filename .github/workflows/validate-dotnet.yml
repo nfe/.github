@@ -40,8 +40,6 @@ jobs:
       # (Microsoft.VisualStudio.Azure.Fabric.MSBuild). Pure PackageReference
       # solutions use dotnet restore — faster, cross-platform, and doesn't
       # need mono on Linux. We detect by grepping the .sln file.
-      # Revisit once Service Fabric is no longer in use anywhere in the
-      # org. See nfe/ai-governance#3.
       - name: Detect sfproj in solution
         id: detect
         shell: bash
