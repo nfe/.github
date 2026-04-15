@@ -1,0 +1,487 @@
+name: Service Fabric upgrade
+
+on:
+  workflow_call:
+    inputs:
+      solution:
+        description: "Path to the .sln file to build"
+        required: true
+        type: string
+      sfproj:
+        description: "Path to the Service Fabric .sfproj file"
+        required: true
+        type: string
+      applicationPackageRoot:
+        description: "Path to the ApplicationPackageRoot directory (contains ApplicationManifest.xml)"
+        required: true
+        type: string
+      applicationParameters:
+        description: "Path to the ApplicationParameters file (e.g., Production.xml)"
+        required: true
+        type: string
+      tagPrefix:
+        description: "Release tag prefix used to extract the version (default 'v')"
+        required: false
+        type: string
+        default: "v"
+      environment:
+        description: "GitHub environment name for the deploy job (enables protection rules)"
+        required: false
+        type: string
+        default: "production"
+      healthCheckWaitSec:
+        description: "Seconds SF waits before the first health check after each upgrade domain"
+        required: false
+        type: number
+        default: 15
+      healthCheckRetrySec:
+        description: "Timeout (sec) SF uses to retry health checks if they fail"
+        required: false
+        type: number
+        default: 15
+      healthCheckStableSec:
+        description: "Seconds SF waits to confirm the application is stable before moving on"
+        required: false
+        type: number
+        default: 15
+      upgradeDomainTimeoutSec:
+        description: "Max seconds SF takes to upgrade a single upgrade domain"
+        required: false
+        type: number
+        default: 600
+      copyTimeoutSec:
+        description: "Timeout (sec) for Copy-ServiceFabricApplicationPackage (package upload to image store)"
+        required: false
+        type: number
+        default: 2700
+      registerTimeoutSec:
+        description: "Timeout (sec) for Register-ServiceFabricApplicationType"
+        required: false
+        type: number
+        default: 2700
+      runnerPollIntervalSec:
+        description: "Seconds between polls of Get-ServiceFabricApplicationUpgrade"
+        required: false
+        type: number
+        default: 15
+
+concurrency:
+  group: sf-deploy-${{ github.repository }}-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: startsWith(github.event.release.tag_name, inputs.tagPrefix)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    permissions:
+      contents: write
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#${{ inputs.tagPrefix }}}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::Invalid version extracted from tag '$GITHUB_REF_NAME' (prefix '${{ inputs.tagPrefix }}'): '$VERSION'"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet CLI
+        uses: NuGet/setup-nuget@v2
+
+      - name: Stamp version in manifests
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          APP_PKG_ROOT: ${{ inputs.applicationPackageRoot }}
+        run: |
+          $ver = $env:APP_VERSION
+          Write-Host "Stamping version $ver"
+
+          $appManifestPath = "$env:APP_PKG_ROOT/ApplicationManifest.xml"
+          [xml]$app = Get-Content $appManifestPath
+          $app.ApplicationManifest.ApplicationTypeVersion = $ver
+          foreach ($svc in $app.ApplicationManifest.ServiceManifestImport) {
+            $svc.ServiceManifestRef.ServiceManifestVersion = $ver
+          }
+          $app.Save((Resolve-Path $appManifestPath))
+
+          Get-ChildItem $env:APP_PKG_ROOT -Filter ServiceManifest.xml -Recurse | ForEach-Object {
+            [xml]$sm = Get-Content $_.FullName
+            $sm.ServiceManifest.Version = $ver
+            foreach ($cp in $sm.ServiceManifest.CodePackage) { $cp.Version = $ver }
+            foreach ($cfg in $sm.ServiceManifest.ConfigPackage) { $cfg.Version = $ver }
+            $sm.Save($_.FullName)
+          }
+
+      - name: NuGet restore (sfproj packages.config)
+        shell: pwsh
+        env:
+          SFPROJ_DIR: ${{ inputs.sfproj }}
+        run: |
+          $pkgConfigPath = Join-Path (Split-Path $env:SFPROJ_DIR -Parent) "packages.config"
+          nuget restore $pkgConfigPath -SolutionDirectory .
+
+      - name: Restore
+        env:
+          GITHUB_USERNAME: ${{ github.actor }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dotnet restore "${{ inputs.solution }}"
+
+      - name: Build solution
+        run: dotnet build "${{ inputs.solution }}" -c Release --no-restore /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
+
+      - name: Package Service Fabric application
+        run: msbuild "${{ inputs.sfproj }}" -t:Package -p:Configuration=Release -p:Platform=x64
+
+      - name: Stage artifact
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          SFPROJ_DIR: ${{ inputs.sfproj }}
+          APP_PARAMS_FILE: ${{ inputs.applicationParameters }}
+        run: |
+          $sfprojDir = Split-Path $env:SFPROJ_DIR -Parent
+          $out = "sfapp-$env:APP_VERSION"
+          New-Item -ItemType Directory -Path $out | Out-Null
+          Copy-Item -Recurse "$sfprojDir/pkg/Release" "$out/pkg"
+          $paramsDir = Split-Path $env:APP_PARAMS_FILE -Parent
+          Copy-Item -Recurse $paramsDir "$out/ApplicationParameters"
+          Compress-Archive -Path "$out/*" -DestinationPath "$out.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sfapp-${{ steps.version.outputs.version }}
+          path: sfapp-${{ steps.version.outputs.version }}.zip
+          retention-days: 14
+
+      - name: Attach SF package to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: gh release upload "$GITHUB_REF_NAME" "sfapp-$APP_VERSION.zip" --clobber
+
+  deploy:
+    needs: build
+    if: "!github.event.release.prerelease"
+    runs-on: windows-latest
+    timeout-minutes: 60
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    outputs:
+      appName: ${{ steps.manifest.outputs.appName }}
+      appTypeName: ${{ steps.manifest.outputs.appTypeName }}
+      appTypeVersion: ${{ steps.manifest.outputs.appTypeVersion }}
+      appPackageDir: ${{ steps.manifest.outputs.appPackageDir }}
+      previousAppTypeVersion: ${{ steps.previous.outputs.previousAppTypeVersion }}
+      previousAppParametersJson: ${{ steps.previous.outputs.previousAppParametersJson }}
+      isRegistered: ${{ steps.register.outputs.isRegistered }}
+      isCreated: ${{ steps.create.outputs.isCreated }}
+      isUpgrade: ${{ steps.upgrade.outputs.isUpgrade }}
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sfapp-${{ needs.build.outputs.version }}
+
+      - name: Extract artifact
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ needs.build.outputs.version }}
+        run: Expand-Archive -Path "sfapp-$env:APP_VERSION.zip" -DestinationPath "sfapp"
+
+      - name: Install cluster certificate
+        shell: pwsh
+        env:
+          CERT_B64: ${{ secrets.SF_CLUSTER_CERT_PFX_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.SF_CLUSTER_CERT_PASSWORD }}
+        run: |
+          $bytes = [Convert]::FromBase64String($env:CERT_B64)
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP/sfcluster.pfx", $bytes)
+          $password = ConvertTo-SecureString -String $env:CERT_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath "$env:RUNNER_TEMP/sfcluster.pfx" -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          "THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Connect to cluster
+        shell: pwsh
+        env:
+          SF_ENDPOINT: ${{ vars.SF_CLUSTER_ENDPOINT }}
+          SF_SERVER_CERT_THUMBPRINT: ${{ vars.SF_CLUSTER_SERVER_CERT_THUMBPRINT }}
+        run: |
+          Connect-ServiceFabricCluster `
+            -ConnectionEndpoint $env:SF_ENDPOINT `
+            -X509Credential `
+            -FindType FindByThumbprint `
+            -FindValue $env:THUMBPRINT `
+            -StoreLocation CurrentUser `
+            -StoreName My `
+            -ServerCertThumbprint $env:SF_SERVER_CERT_THUMBPRINT
+
+      - name: Load manifests
+        id: manifest
+        shell: pwsh
+        run: |
+          $pkgRoot = "sfapp/pkg"
+          $appManifestPath = "$pkgRoot/ApplicationManifest.xml"
+          [xml]$appManifest = Get-Content $appManifestPath
+
+          $appTypeName = $appManifest.ApplicationManifest.ApplicationTypeName
+          $appTypeVersion = $appManifest.ApplicationManifest.ApplicationTypeVersion
+          $appName = "fabric:/$appTypeName"
+
+          $paramsFileName = Split-Path "${{ inputs.applicationParameters }}" -Leaf
+          $appParametersXml = [xml] (Get-Content "sfapp/ApplicationParameters/$paramsFileName")
+          $appParameters = @{}
+          foreach ($i in $appParametersXml.Application.Parameters.Parameter) {
+            $appParameters[$i.Name] = $i.Value
+          }
+          $appParametersJson = $appParameters | ConvertTo-Json -Compress
+
+          "appTypeName=$appTypeName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "appTypeVersion=$appTypeVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "appName=$appName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "appPackageDir=$pkgRoot" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "appParametersJson<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $appParametersJson | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+          Write-Host "ApplicationName: $appName"
+          Write-Host "ApplicationType: $appTypeName"
+          Write-Host "ApplicationVersion: $appTypeVersion"
+
+      - name: Get previous version
+        id: previous
+        shell: pwsh
+        env:
+          APP_NAME: ${{ steps.manifest.outputs.appName }}
+        run: |
+          $previous = Get-ServiceFabricApplication -ApplicationName $env:APP_NAME -ErrorAction SilentlyContinue
+
+          if (-not $previous) {
+            Write-Host "No previous application found - this will be a fresh install."
+            "previousAppTypeVersion=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "previousAppParametersJson=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            return
+          }
+
+          $prevParameters = @{}
+          foreach ($i in $previous.ApplicationParameters) {
+            $prevParameters[$i.Name] = $i.Value
+          }
+          $prevParametersJson = $prevParameters | ConvertTo-Json -Compress
+
+          "previousAppTypeVersion=$($previous.ApplicationTypeVersion)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "previousAppParametersJson<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $prevParametersJson | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+          Write-Host "Previous ApplicationVersion: $($previous.ApplicationTypeVersion)"
+
+      - name: Copy application package to image store
+        shell: pwsh
+        env:
+          APP_TYPE_NAME: ${{ steps.manifest.outputs.appTypeName }}
+          APP_TYPE_VERSION: ${{ steps.manifest.outputs.appTypeVersion }}
+          APP_PKG_DIR: ${{ steps.manifest.outputs.appPackageDir }}
+        run: |
+          $imageStorePath = "$env:APP_TYPE_NAME`_$env:APP_TYPE_VERSION"
+          Copy-ServiceFabricApplicationPackage `
+            -ApplicationPackagePath $env:APP_PKG_DIR `
+            -ImageStoreConnectionString "fabric:ImageStore" `
+            -ApplicationPackagePathInImageStore $imageStorePath `
+            -CompressPackage `
+            -TimeoutSec ${{ inputs.copyTimeoutSec }}
+          "IMAGE_STORE_PATH=$imageStorePath" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Register application type
+        id: register
+        shell: pwsh
+        run: |
+          Register-ServiceFabricApplicationType `
+            -ApplicationPathInImageStore $env:IMAGE_STORE_PATH `
+            -TimeoutSec ${{ inputs.registerTimeoutSec }}
+          "isRegistered=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Create application
+        id: create
+        if: steps.previous.outputs.previousAppTypeVersion == ''
+        shell: pwsh
+        env:
+          APP_NAME: ${{ steps.manifest.outputs.appName }}
+          APP_TYPE_NAME: ${{ steps.manifest.outputs.appTypeName }}
+          APP_TYPE_VERSION: ${{ steps.manifest.outputs.appTypeVersion }}
+          APP_PARAMS_JSON: ${{ steps.manifest.outputs.appParametersJson }}
+        run: |
+          $params = ConvertFrom-Json $env:APP_PARAMS_JSON
+          $hash = @{}
+          foreach ($p in $params.PSObject.Properties) { $hash[$p.Name] = $p.Value }
+
+          New-ServiceFabricApplication `
+            -ApplicationName $env:APP_NAME `
+            -ApplicationTypeName $env:APP_TYPE_NAME `
+            -ApplicationTypeVersion $env:APP_TYPE_VERSION `
+            -ApplicationParameter $hash
+          "isCreated=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upgrade application
+        id: upgrade
+        if: steps.previous.outputs.previousAppTypeVersion != ''
+        shell: pwsh
+        env:
+          APP_NAME: ${{ steps.manifest.outputs.appName }}
+          APP_TYPE_VERSION: ${{ steps.manifest.outputs.appTypeVersion }}
+          APP_PARAMS_JSON: ${{ steps.manifest.outputs.appParametersJson }}
+        run: |
+          $params = ConvertFrom-Json $env:APP_PARAMS_JSON
+          $hash = @{}
+          foreach ($p in $params.PSObject.Properties) { $hash[$p.Name] = $p.Value }
+
+          Start-ServiceFabricApplicationUpgrade `
+            -ApplicationName $env:APP_NAME `
+            -ApplicationTypeVersion $env:APP_TYPE_VERSION `
+            -ApplicationParameter $hash `
+            -FailureAction Rollback `
+            -Monitored `
+            -HealthCheckWaitDurationSec ${{ inputs.healthCheckWaitSec }} `
+            -HealthCheckRetryTimeoutSec ${{ inputs.healthCheckRetrySec }} `
+            -HealthCheckStableDurationSec ${{ inputs.healthCheckStableSec }} `
+            -UpgradeDomainTimeoutSec ${{ inputs.upgradeDomainTimeoutSec }}
+          "isUpgrade=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+          do {
+            Start-Sleep -Seconds ${{ inputs.runnerPollIntervalSec }}
+            $u = Get-ServiceFabricApplicationUpgrade -ApplicationName $env:APP_NAME
+            Write-Host "UpgradeState=$($u.UpgradeState) CurrentDomain=$($u.CurrentUpgradeDomainProgress)"
+          } while ($u.UpgradeState -in 'RollingForwardInProgress','RollingForwardPending')
+
+          if ($u.UpgradeState -ne 'RollingForwardCompleted') {
+            throw "Upgrade ended in non-success state: $($u.UpgradeState)"
+          }
+
+      - name: Cleanup certificate
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:THUMBPRINT) {
+            Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Thumbprint -eq $env:THUMBPRINT } | Remove-Item -Force
+          }
+          Remove-Item -Force "$env:RUNNER_TEMP/sfcluster.pfx" -ErrorAction SilentlyContinue
+
+  rollback:
+    needs: [build, deploy]
+    if: |
+      (failure() || cancelled())
+      && needs.deploy.result != 'success'
+      && needs.deploy.result != 'skipped'
+      && !github.event.release.prerelease
+    runs-on: windows-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Install cluster certificate
+        shell: pwsh
+        env:
+          CERT_B64: ${{ secrets.SF_CLUSTER_CERT_PFX_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.SF_CLUSTER_CERT_PASSWORD }}
+        run: |
+          $bytes = [Convert]::FromBase64String($env:CERT_B64)
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP/sfcluster.pfx", $bytes)
+          $password = ConvertTo-SecureString -String $env:CERT_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath "$env:RUNNER_TEMP/sfcluster.pfx" -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          "THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Connect to cluster
+        shell: pwsh
+        env:
+          SF_ENDPOINT: ${{ vars.SF_CLUSTER_ENDPOINT }}
+          SF_SERVER_CERT_THUMBPRINT: ${{ vars.SF_CLUSTER_SERVER_CERT_THUMBPRINT }}
+        run: |
+          Connect-ServiceFabricCluster `
+            -ConnectionEndpoint $env:SF_ENDPOINT `
+            -X509Credential `
+            -FindType FindByThumbprint `
+            -FindValue $env:THUMBPRINT `
+            -StoreLocation CurrentUser `
+            -StoreName My `
+            -ServerCertThumbprint $env:SF_SERVER_CERT_THUMBPRINT
+
+      - name: Remove application
+        if: needs.deploy.outputs.isCreated == 'true'
+        shell: pwsh
+        continue-on-error: true
+        env:
+          APP_NAME: ${{ needs.deploy.outputs.appName }}
+        run: Remove-ServiceFabricApplication -ApplicationName $env:APP_NAME -ForceRemove -Force
+
+      - name: Downgrade application
+        if: needs.deploy.outputs.isUpgrade == 'true'
+        shell: pwsh
+        continue-on-error: true
+        env:
+          APP_NAME: ${{ needs.deploy.outputs.appName }}
+          PREV_VERSION: ${{ needs.deploy.outputs.previousAppTypeVersion }}
+          PREV_PARAMS_JSON: ${{ needs.deploy.outputs.previousAppParametersJson }}
+        run: |
+          $app = Get-ServiceFabricApplication -ApplicationName $env:APP_NAME
+
+          if ($app.ApplicationStatus -eq 'Upgrading') {
+            Start-ServiceFabricApplicationRollback -ApplicationName $env:APP_NAME
+          } else {
+            $params = ConvertFrom-Json $env:PREV_PARAMS_JSON
+            $hash = @{}
+            foreach ($p in $params.PSObject.Properties) { $hash[$p.Name] = $p.Value }
+
+            Start-ServiceFabricApplicationUpgrade `
+                -ApplicationName $env:APP_NAME `
+                -ApplicationTypeVersion $env:PREV_VERSION `
+                -ApplicationParameter $hash `
+                -Monitored `
+                -FailureAction Manual `
+                -HealthCheckWaitDurationSec ${{ inputs.healthCheckWaitSec }} `
+                -HealthCheckRetryTimeoutSec ${{ inputs.healthCheckRetrySec }} `
+                -HealthCheckStableDurationSec ${{ inputs.healthCheckStableSec }} `
+                -UpgradeDomainTimeoutSec ${{ inputs.upgradeDomainTimeoutSec }} `
+                -Force
+          }
+
+      - name: Unregister application type
+        if: needs.deploy.outputs.isRegistered == 'true'
+        shell: pwsh
+        continue-on-error: true
+        env:
+          APP_TYPE_NAME: ${{ needs.deploy.outputs.appTypeName }}
+          APP_TYPE_VERSION: ${{ needs.deploy.outputs.appTypeVersion }}
+        run: Unregister-ServiceFabricApplicationType -ApplicationTypeName $env:APP_TYPE_NAME -ApplicationTypeVersion $env:APP_TYPE_VERSION -Force
+
+      - name: Cleanup certificate
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:THUMBPRINT) {
+            Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Thumbprint -eq $env:THUMBPRINT } | Remove-Item -Force
+          }
+          Remove-Item -Force "$env:RUNNER_TEMP/sfcluster.pfx" -ErrorAction SilentlyContinue
