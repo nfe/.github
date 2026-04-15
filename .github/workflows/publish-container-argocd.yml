@@ -35,15 +35,7 @@ on:
         type: string
         default: ""
     secrets:
-      ARGOCD_SERVER_URL:
-        required: true
       ARGOCD_AUTH_TOKEN:
-        required: true
-      ARGOCD_PROJECT:
-        required: true
-      ARGOCD_APP_NAMESPACE:
-        required: true
-      ARGOCD_DESTINATION_CLUSTER:
         required: true
 
 concurrency:
@@ -69,10 +61,10 @@ jobs:
         run: |
           argocd app create "${{ inputs.appName }}" \
             --auth-token "${{ secrets.ARGOCD_AUTH_TOKEN }}" \
-            --server "${{ secrets.ARGOCD_SERVER_URL }}" \
-            --app-namespace "${{ secrets.ARGOCD_APP_NAMESPACE }}" \
-            --project "${{ secrets.ARGOCD_PROJECT }}" \
-            --dest-server "${{ secrets.ARGOCD_DESTINATION_CLUSTER }}" \
+            --server "${{ vars.ARGOCD_SERVER_URL }}" \
+            --app-namespace "${{ vars.ARGOCD_APP_NAMESPACE }}" \
+            --project "${{ vars.ARGOCD_PROJECT }}" \
+            --dest-server "${{ vars.ARGOCD_DESTINATION_CLUSTER }}" \
             --dest-namespace "${{ inputs.namespace }}" \
             --repo "${{ github.server_url }}/${{ github.repository }}.git" \
             --path "${{ inputs.chartPath }}" \
@@ -91,8 +83,8 @@ jobs:
         run: |
           argocd app wait "${{ inputs.appName }}" \
             --auth-token "${{ secrets.ARGOCD_AUTH_TOKEN }}" \
-            --server "${{ secrets.ARGOCD_SERVER_URL }}" \
-            --app-namespace "${{ secrets.ARGOCD_APP_NAMESPACE }}" \
+            --server "${{ vars.ARGOCD_SERVER_URL }}" \
+            --app-namespace "${{ vars.ARGOCD_APP_NAMESPACE }}" \
             --health \
             --sync \
             --timeout 600 \
