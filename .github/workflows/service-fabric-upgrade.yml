@@ -28,7 +28,7 @@ on:
         description: "GitHub environment name for the deploy job (enables protection rules)"
         required: false
         type: string
-        default: "production"
+        default: "Production"
       healthCheckWaitSec:
         description: "Seconds SF waits before the first health check after each upgrade domain"
         required: false
