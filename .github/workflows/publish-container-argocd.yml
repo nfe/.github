@@ -1,39 +1,26 @@
-name: Publish container image and deploy via ArgoCD
+name: Deploy container via ArgoCD
 
 on:
   workflow_call:
     inputs:
-      projectPath:
-        description: "Path to the .csproj or .sln to build (e.g., webapi/webapi.csproj)"
-        required: true
-        type: string
-      imageName:
-        description: "Image name under ghcr.io/nfe/ (e.g., dfetech-xml2pdf-api)"
-        required: true
-        type: string
-      tagPrefix:
-        description: "Release tag prefix (e.g., 'v' for 'v1.0.0' or 'xml2pdf-v' for scoped tags)"
-        required: false
-        type: string
-        default: "v"
-      dockerfile:
-        description: "Path to the Dockerfile (relative to repo root)"
-        required: true
-        type: string
-      dockerContext:
-        description: "Docker build context directory (relative to repo root)"
-        required: true
-        type: string
-      argocdAppName:
+      appName:
         description: "ArgoCD application name (e.g., xml2pdf-api)"
         required: true
         type: string
-      k8sNamespace:
+      namespace:
         description: "Target Kubernetes namespace"
         required: true
         type: string
+      image:
+        description: "Image repository without tag (e.g., ghcr.io/nfe/dfetech-xml2pdf-api)"
+        required: true
+        type: string
+      version:
+        description: "Image tag to deploy (SemVer, e.g., 1.0.0)"
+        required: true
+        type: string
       chartPath:
-        description: "Path to the Helm chart within the repo"
+        description: "Path to the Helm chart within the calling repo"
         required: false
         type: string
         default: "kubernetes"
@@ -42,13 +29,8 @@ on:
         required: false
         type: string
         default: "values-production.yaml"
-      dotnetBuildArgs:
-        description: "Extra args appended to dotnet build (e.g., -p:BuildRPM=true)"
-        required: false
-        type: string
-        default: ""
-      preDockerScript:
-        description: "Optional shell script (relative to repo root) executed after dotnet build, before docker build. Receives VERSION and BUILD_CONFIG in env."
+      revision:
+        description: "Git revision (sha, branch, or tag) for ArgoCD to sync. Defaults to github.sha."
         required: false
         type: string
         default: ""
@@ -64,96 +46,12 @@ on:
       ARGOCD_DESTINATION_CLUSTER:
         required: true
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_FULL: ghcr.io/${{ github.repository_owner }}/${{ inputs.imageName }}
-
 jobs:
-  build-and-publish:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Extract version from tag
-        id: version
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME#${{ inputs.tagPrefix }}}"
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
-            echo "::error::Invalid version extracted from tag '$GITHUB_REF_NAME' (prefix '${{ inputs.tagPrefix }}'): '$VERSION'"
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: global.json
-
-      - name: Restore
-        env:
-          GITHUB_USERNAME: ${{ github.actor }}
-          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: dotnet restore "${{ inputs.projectPath }}"
-
-      - name: Build
-        run: |
-          dotnet build "${{ inputs.projectPath }}" \
-            --no-restore \
-            -c Release \
-            /p:Version=${{ steps.version.outputs.version }} \
-            /p:Deterministic=true \
-            ${{ inputs.dotnetBuildArgs }}
-
-      - name: Run pre-docker script
-        if: ${{ inputs.preDockerScript != '' }}
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          BUILD_CONFIG: Release
-        run: bash "${{ inputs.preDockerScript }}"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ inputs.dockerContext }}
-          file: ${{ inputs.dockerfile }}
-          push: true
-          build-args: |
-            VERSION=${{ steps.version.outputs.version }}
-          tags: |
-            ${{ env.IMAGE_FULL }}:${{ steps.version.outputs.version }}
-            ${{ env.IMAGE_FULL }}:latest
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.version.outputs.version }}
-            org.opencontainers.image.created=${{ github.event.release.published_at }}
-
   deploy:
-    needs: build-and-publish
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
-    env:
-      VERSION: ${{ needs.build-and-publish.outputs.version }}
     steps:
       - name: Install ArgoCD CLI
         run: |
@@ -162,20 +60,22 @@ jobs:
           argocd version --client
 
       - name: Upsert ArgoCD application
+        env:
+          REVISION: ${{ inputs.revision != '' && inputs.revision || github.sha }}
         run: |
-          argocd app create "${{ inputs.argocdAppName }}" \
+          argocd app create "${{ inputs.appName }}" \
             --auth-token "${{ secrets.ARGOCD_AUTH_TOKEN }}" \
             --server "${{ secrets.ARGOCD_SERVER_URL }}" \
             --app-namespace "${{ secrets.ARGOCD_APP_NAMESPACE }}" \
             --project "${{ secrets.ARGOCD_PROJECT }}" \
             --dest-server "${{ secrets.ARGOCD_DESTINATION_CLUSTER }}" \
-            --dest-namespace "${{ inputs.k8sNamespace }}" \
+            --dest-namespace "${{ inputs.namespace }}" \
             --repo "${{ github.server_url }}/${{ github.repository }}.git" \
             --path "${{ inputs.chartPath }}" \
             --values "${{ inputs.valuesFile }}" \
-            --revision "${{ github.sha }}" \
-            --helm-set image.repository=${{ env.IMAGE_FULL }} \
-            --helm-set image.tag=${{ env.VERSION }} \
+            --revision "${REVISION}" \
+            --helm-set image.repository=${{ inputs.image }} \
+            --helm-set image.tag=${{ inputs.version }} \
             --sync-policy automated \
             --sync-option Prune=true \
             --sync-option SelfHeal=true \
@@ -185,7 +85,7 @@ jobs:
 
       - name: Wait for sync and health
         run: |
-          argocd app wait "${{ inputs.argocdAppName }}" \
+          argocd app wait "${{ inputs.appName }}" \
             --auth-token "${{ secrets.ARGOCD_AUTH_TOKEN }}" \
             --server "${{ secrets.ARGOCD_SERVER_URL }}" \
             --app-namespace "${{ secrets.ARGOCD_APP_NAMESPACE }}" \
