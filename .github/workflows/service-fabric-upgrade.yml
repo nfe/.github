@@ -71,7 +71,6 @@ concurrency:
 
 jobs:
   build:
-    if: startsWith(github.event.release.tag_name, inputs.tagPrefix)
     runs-on: windows-latest
     timeout-minutes: 45
     outputs:
