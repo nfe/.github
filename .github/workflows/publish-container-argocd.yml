@@ -46,6 +46,10 @@ on:
       ARGOCD_DESTINATION_CLUSTER:
         required: true
 
+concurrency:
+  group: argocd-${{ inputs.appName }}-${{ inputs.namespace }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
