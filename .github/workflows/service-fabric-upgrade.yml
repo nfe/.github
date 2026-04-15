@@ -20,7 +20,7 @@ on:
         required: true
         type: string
       tagPrefix:
-        description: "Release tag prefix used to extract the version (default 'v')"
+        description: "Release tag prefix used to extract the version (e.g., 'v' for 'v1.0.0', 'foundation-v' for 'foundation-v1.2.3')"
         required: false
         type: string
         default: "v"
@@ -64,6 +64,11 @@ on:
         required: false
         type: number
         default: 15
+    secrets:
+      SF_CLUSTER_CERT_PFX_BASE64:
+        required: true
+      SF_CLUSTER_CERT_PASSWORD:
+        required: true
 
 concurrency:
   group: sf-deploy-${{ github.repository }}-${{ inputs.environment }}

@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       tagPrefix:
-        description: "Tag prefix (e.g., 'foundation-v') used to extract the version from the release tag"
+        description: "Release tag prefix used to extract the version (e.g., 'v' for 'v1.0.0', 'foundation-v' for 'foundation-v1.2.3')"
         required: true
         type: string
 
