@@ -64,6 +64,11 @@ on:
         required: false
         type: number
         default: 15
+    secrets:
+      SF_CLUSTER_CERT_PFX_BASE64:
+        required: true
+      SF_CLUSTER_CERT_PASSWORD:
+        required: true
 
 concurrency:
   group: sf-deploy-${{ github.repository }}-${{ inputs.environment }}

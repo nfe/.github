@@ -34,6 +34,17 @@ on:
         required: false
         type: string
         default: ""
+    secrets:
+      ARGOCD_SERVER_URL:
+        required: true
+      ARGOCD_AUTH_TOKEN:
+        required: true
+      ARGOCD_PROJECT:
+        required: true
+      ARGOCD_APP_NAMESPACE:
+        required: true
+      ARGOCD_DESTINATION_CLUSTER:
+        required: true
 
 jobs:
   deploy:
