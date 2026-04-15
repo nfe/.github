@@ -1,0 +1,108 @@
+name: Build and push container to GHCR
+
+on:
+  workflow_call:
+    inputs:
+      imageName:
+        description: "Image name under ghcr.io/<owner>/ (e.g., dfetech-xml2pdf-api)"
+        required: true
+        type: string
+      tagPrefix:
+        description: "Release tag prefix to strip (e.g., 'v' or 'xml2pdf-v')"
+        required: false
+        type: string
+        default: "v"
+      dockerfile:
+        description: "Path to Dockerfile relative to repo root"
+        required: false
+        type: string
+        default: "Dockerfile"
+      dockerContext:
+        description: "Docker build context relative to repo root"
+        required: false
+        type: string
+        default: "."
+      version:
+        description: "Override version (SemVer, no prefix). Use for workflow_dispatch callers. If empty, extracted from release tag."
+        required: false
+        type: string
+        default: ""
+      extraBuildArgs:
+        description: "Additional --build-arg entries, one per line (key=value)"
+        required: false
+        type: string
+        default: ""
+      extraLabels:
+        description: "Additional OCI labels, one per line (key=value)"
+        required: false
+        type: string
+        default: ""
+    outputs:
+      version:
+        description: "Extracted SemVer (no prefix)"
+        value: ${{ jobs.build.outputs.version }}
+      image:
+        description: "Full image repository without tag (e.g., ghcr.io/nfe/dfetech-xml2pdf-api)"
+        value: ${{ jobs.build.outputs.image }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      image: ${{ env.IMAGE }}
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.imageName }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: |
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          elif [[ "${{ github.event_name }}" == "release" ]]; then
+            VERSION="${GITHUB_REF_NAME#${{ inputs.tagPrefix }}}"
+          else
+            echo "::error::No version source. Pass 'version' input or trigger from a release."
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::Invalid version '$VERSION' (source: ${GITHUB_REF_NAME:-workflow_dispatch})"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.dockerContext }}
+          file: ${{ inputs.dockerfile }}
+          push: true
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            ${{ inputs.extraBuildArgs }}
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            ${{ inputs.extraLabels }}
