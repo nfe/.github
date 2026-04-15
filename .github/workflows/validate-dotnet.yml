@@ -35,26 +35,36 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Windows runners need the legacy nuget CLI to handle Service Fabric
-      # sfproj's packages.config (Microsoft.VisualStudio.Azure.Fabric.MSBuild).
-      # Non-Windows runners use dotnet restore — setup-nuget on Linux doesn't
-      # expose a `nuget` command in PATH, and pure-PackageReference solutions
-      # don't need it anyway.
-      # Revisit this split once Service Fabric is no longer in use anywhere
-      # in the org. See nfe/ai-governance#3.
+      # Solutions that include a Service Fabric .sfproj need the legacy
+      # nuget CLI to restore the sfproj's packages.config
+      # (Microsoft.VisualStudio.Azure.Fabric.MSBuild). Pure PackageReference
+      # solutions use dotnet restore — faster, cross-platform, and doesn't
+      # need mono on Linux. We detect by grepping the .sln file.
+      # Revisit once Service Fabric is no longer in use anywhere in the
+      # org. See nfe/ai-governance#3.
+      - name: Detect sfproj in solution
+        id: detect
+        shell: bash
+        run: |
+          if grep -q '\.sfproj' "${{ inputs.solution }}" 2>/dev/null; then
+            echo "has_sfproj=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_sfproj=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup NuGet CLI
-        if: contains(inputs.runner, 'windows')
+        if: steps.detect.outputs.has_sfproj == 'true'
         uses: NuGet/setup-nuget@v2
 
       - name: Restore (nuget CLI)
-        if: contains(inputs.runner, 'windows')
+        if: steps.detect.outputs.has_sfproj == 'true'
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: nuget restore "${{ inputs.solution }}"
 
       - name: Restore (dotnet)
-        if: "!contains(inputs.runner, 'windows')"
+        if: steps.detect.outputs.has_sfproj != 'true'
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
