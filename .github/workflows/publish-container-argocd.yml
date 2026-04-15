@@ -1,0 +1,95 @@
+name: Deploy container via ArgoCD
+
+on:
+  workflow_call:
+    inputs:
+      appName:
+        description: "ArgoCD application name (e.g., xml2pdf-api)"
+        required: true
+        type: string
+      namespace:
+        description: "Target Kubernetes namespace"
+        required: true
+        type: string
+      image:
+        description: "Image repository without tag (e.g., ghcr.io/nfe/dfetech-xml2pdf-api)"
+        required: true
+        type: string
+      version:
+        description: "Image tag to deploy (SemVer, e.g., 1.0.0)"
+        required: true
+        type: string
+      chartPath:
+        description: "Path to the Helm chart within the calling repo"
+        required: false
+        type: string
+        default: "kubernetes"
+      valuesFile:
+        description: "Values file name within chartPath"
+        required: false
+        type: string
+        default: "values-production.yaml"
+      revision:
+        description: "Git revision (sha, branch, or tag) for ArgoCD to sync. Defaults to github.sha."
+        required: false
+        type: string
+        default: ""
+    secrets:
+      ARGOCD_SERVER_URL:
+        required: true
+      ARGOCD_AUTH_TOKEN:
+        required: true
+      ARGOCD_PROJECT:
+        required: true
+      ARGOCD_APP_NAMESPACE:
+        required: true
+      ARGOCD_DESTINATION_CLUSTER:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          sudo install -m 555 /tmp/argocd /usr/local/bin/argocd
+          argocd version --client
+
+      - name: Upsert ArgoCD application
+        env:
+          REVISION: ${{ inputs.revision != '' && inputs.revision || github.sha }}
+        run: |
+          argocd app create "${{ inputs.appName }}" \
+            --auth-token "${{ secrets.ARGOCD_AUTH_TOKEN }}" \
+            --server "${{ secrets.ARGOCD_SERVER_URL }}" \
+            --app-namespace "${{ secrets.ARGOCD_APP_NAMESPACE }}" \
+            --project "${{ secrets.ARGOCD_PROJECT }}" \
+            --dest-server "${{ secrets.ARGOCD_DESTINATION_CLUSTER }}" \
+            --dest-namespace "${{ inputs.namespace }}" \
+            --repo "${{ github.server_url }}/${{ github.repository }}.git" \
+            --path "${{ inputs.chartPath }}" \
+            --values "${{ inputs.valuesFile }}" \
+            --revision "${REVISION}" \
+            --helm-set image.repository=${{ inputs.image }} \
+            --helm-set image.tag=${{ inputs.version }} \
+            --sync-policy automated \
+            --sync-option Prune=true \
+            --sync-option SelfHeal=true \
+            --sync-option CreateNamespace=true \
+            --upsert \
+            --grpc-web
+
+      - name: Wait for sync and health
+        run: |
+          argocd app wait "${{ inputs.appName }}" \
+            --auth-token "${{ secrets.ARGOCD_AUTH_TOKEN }}" \
+            --server "${{ secrets.ARGOCD_SERVER_URL }}" \
+            --app-namespace "${{ secrets.ARGOCD_APP_NAMESPACE }}" \
+            --health \
+            --sync \
+            --timeout 600 \
+            --grpc-web
