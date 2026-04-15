@@ -4,13 +4,23 @@ on:
   workflow_call:
     inputs:
       solution:
-        description: "Path to the .sln file to build and test"
+        description: "Path to the .sln (or .csproj) file to build and test"
         required: true
         type: string
+      runner:
+        description: "GitHub-hosted runner image to use (e.g., ubuntu-latest, windows-latest)"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+      skipTests:
+        description: "Skip the dotnet test step (useful for projects without tests or with Windows-only / SF dependencies)"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -35,4 +45,5 @@ jobs:
         run: dotnet build "${{ inputs.solution }}" --no-restore -c Release
 
       - name: Test
+        if: ${{ !inputs.skipTests }}
         run: dotnet test "${{ inputs.solution }}" --no-build -c Release --logger "console;verbosity=minimal"
