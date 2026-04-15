@@ -35,20 +35,30 @@ jobs:
         with:
           global-json-file: global.json
 
+      # Windows runners need the legacy nuget CLI to handle Service Fabric
+      # sfproj's packages.config (Microsoft.VisualStudio.Azure.Fabric.MSBuild).
+      # Non-Windows runners use dotnet restore — setup-nuget on Linux doesn't
+      # expose a `nuget` command in PATH, and pure-PackageReference solutions
+      # don't need it anyway.
+      # Revisit this split once Service Fabric is no longer in use anywhere
+      # in the org. See nfe/ai-governance#3.
       - name: Setup NuGet CLI
+        if: contains(inputs.runner, 'windows')
         uses: NuGet/setup-nuget@v2
 
-      # WORKAROUND: we use `nuget restore` (legacy CLI) instead of `dotnet restore`
-      # because it's the only tool that handles both PackageReference and
-      # packages.config in one pass — the latter is still needed by Service
-      # Fabric sfproj's SDK package (`Microsoft.VisualStudio.Azure.Fabric.MSBuild`).
-      # Switch back to `dotnet restore` once Service Fabric is no longer in use
-      # anywhere in the org. See nfe/ai-governance#3 for the broader migration.
-      - name: Restore
+      - name: Restore (nuget CLI)
+        if: contains(inputs.runner, 'windows')
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: nuget restore "${{ inputs.solution }}"
+
+      - name: Restore (dotnet)
+        if: "!contains(inputs.runner, 'windows')"
+        env:
+          GITHUB_USERNAME: ${{ github.actor }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dotnet restore "${{ inputs.solution }}"
 
       - name: Build
         run: dotnet build "${{ inputs.solution }}" --no-restore -c Release
