@@ -22,11 +22,6 @@ on:
         required: false
         type: string
         default: "."
-      version:
-        description: "Override version (SemVer, no prefix). Use for workflow_dispatch callers. If empty, extracted from release tag."
-        required: false
-        type: string
-        default: ""
       extraBuildArgs:
         description: "Additional --build-arg entries, one per line (key=value)"
         required: false
@@ -47,7 +42,7 @@ on:
 
 jobs:
   build:
-    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, inputs.tagPrefix)
+    if: startsWith(github.event.release.tag_name, inputs.tagPrefix)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -62,20 +57,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract version
+      - name: Extract version from tag
         id: version
         shell: bash
         run: |
-          if [[ -n "${{ inputs.version }}" ]]; then
-            VERSION="${{ inputs.version }}"
-          elif [[ "${{ github.event_name }}" == "release" ]]; then
-            VERSION="${GITHUB_REF_NAME#${{ inputs.tagPrefix }}}"
-          else
-            echo "::error::No version source. Pass 'version' input or trigger from a release."
-            exit 1
-          fi
+          VERSION="${GITHUB_REF_NAME#${{ inputs.tagPrefix }}}"
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
-            echo "::error::Invalid version '$VERSION' (source: ${GITHUB_REF_NAME:-workflow_dispatch})"
+            echo "::error::Invalid version extracted from tag '$GITHUB_REF_NAME' (prefix '${{ inputs.tagPrefix }}'): '$VERSION'"
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
