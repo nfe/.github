@@ -35,11 +35,14 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Setup NuGet CLI
+        uses: NuGet/setup-nuget@v2
+
       - name: Restore
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: dotnet restore "${{ inputs.solution }}"
+        run: nuget restore "${{ inputs.solution }}"
 
       - name: Build
         run: dotnet build "${{ inputs.solution }}" --no-restore -c Release
