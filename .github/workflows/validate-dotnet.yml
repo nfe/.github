@@ -38,6 +38,12 @@ jobs:
       - name: Setup NuGet CLI
         uses: NuGet/setup-nuget@v2
 
+      # WORKAROUND: we use `nuget restore` (legacy CLI) instead of `dotnet restore`
+      # because it's the only tool that handles both PackageReference and
+      # packages.config in one pass — the latter is still needed by Service
+      # Fabric sfproj's SDK package (`Microsoft.VisualStudio.Azure.Fabric.MSBuild`).
+      # Switch back to `dotnet restore` once Service Fabric is no longer in use
+      # anywhere in the org. See nfe/ai-governance#3 for the broader migration.
       - name: Restore
         env:
           GITHUB_USERNAME: ${{ github.actor }}

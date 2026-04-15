@@ -116,19 +116,11 @@ jobs:
             $sm.Save($_.FullName)
           }
 
-      - name: NuGet restore (sfproj packages.config)
-        shell: pwsh
-        env:
-          SFPROJ_DIR: ${{ inputs.sfproj }}
-        run: |
-          $pkgConfigPath = Join-Path (Split-Path $env:SFPROJ_DIR -Parent) "packages.config"
-          nuget restore $pkgConfigPath -SolutionDirectory .
-
       - name: Restore
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: dotnet restore "${{ inputs.solution }}"
+        run: nuget restore "${{ inputs.solution }}"
 
       - name: Build solution
         run: dotnet build "${{ inputs.solution }}" -c Release --no-restore /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
