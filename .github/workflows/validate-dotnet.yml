@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       runner:
-        description: "GitHub-hosted runner image to use (e.g., ubuntu-latest, windows-latest)"
+        description: "Runner label to use (for example, ubuntu-latest, windows-latest, or a self-hosted runner label)"
         required: false
         type: string
         default: "ubuntu-latest"
