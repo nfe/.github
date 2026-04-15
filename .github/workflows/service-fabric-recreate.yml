@@ -252,7 +252,18 @@ jobs:
         env:
           APP_NAME: ${{ steps.manifest.outputs.appName }}
         run: |
-          $previous = Get-ServiceFabricApplication -ApplicationName $env:APP_NAME -ErrorAction SilentlyContinue
+          try {
+            $previous = Get-ServiceFabricApplication -ApplicationName $env:APP_NAME -ErrorAction Stop
+          } catch {
+            $msg = $_.Exception.Message
+            if ($msg -match 'ApplicationNotFound|not found|does not exist') {
+              Write-Host "Application not present on cluster: $msg"
+              $previous = $null
+            } else {
+              Write-Error "Failed to query previous application: $msg"
+              throw
+            }
+          }
 
           if (-not $previous) {
             Write-Host "No previous application found - this will be a fresh install."
