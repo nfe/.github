@@ -1,10 +1,22 @@
-name: Deploy container via ArgoCD
+name: Publish container and deploy via ArgoCD
 
 on:
   workflow_call:
     inputs:
+      imageName:
+        description: "Image name under ghcr.io/<owner>/ (e.g., dfetech-xml2pdf-api)"
+        required: true
+        type: string
+      tagPrefix:
+        description: "Release tag prefix used to extract the version (e.g., 'v' for 'v1.0.0', 'xml2pdf-api-v' for 'xml2pdf-api-v1.2.3')"
+        required: true
+        type: string
       appName:
         description: "ArgoCD application name (e.g., xml2pdf-api). Also used as prefix for the GitHub environment '{appName}-{stage}'."
+        required: true
+        type: string
+      namespace:
+        description: "Target Kubernetes namespace"
         required: true
         type: string
       stage:
@@ -12,18 +24,26 @@ on:
         required: false
         type: string
         default: "prod"
-      namespace:
-        description: "Target Kubernetes namespace"
-        required: true
+      dockerfile:
+        description: "Path to Dockerfile relative to repo root"
+        required: false
         type: string
-      image:
-        description: "Image repository without tag (e.g., ghcr.io/nfe/dfetech-xml2pdf-api)"
-        required: true
+        default: "Dockerfile"
+      dockerContext:
+        description: "Docker build context relative to repo root"
+        required: false
         type: string
-      version:
-        description: "Image tag to deploy (SemVer, e.g., 1.0.0)"
-        required: true
+        default: "."
+      extraBuildArgs:
+        description: "Additional --build-arg entries, one per line (key=value)"
+        required: false
         type: string
+        default: ""
+      extraLabels:
+        description: "Additional OCI labels, one per line (key=value)"
+        required: false
+        type: string
+        default: ""
       chartPath:
         description: "Path to the Helm chart within the calling repo"
         required: false
@@ -48,7 +68,62 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      image: ${{ env.IMAGE }}
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.imageName }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#${{ inputs.tagPrefix }}}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::Invalid version extracted from tag '$GITHUB_REF_NAME' (prefix '${{ inputs.tagPrefix }}'): '$VERSION'"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.dockerContext }}
+          file: ${{ inputs.dockerfile }}
+          push: true
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            ${{ inputs.extraBuildArgs }}
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            ${{ inputs.extraLabels }}
+
   deploy:
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: ${{ inputs.appName }}-${{ inputs.stage }}
@@ -76,8 +151,8 @@ jobs:
             --path "${{ inputs.chartPath }}" \
             --values "${{ inputs.valuesFile }}" \
             --revision "${REVISION}" \
-            --helm-set image.repository=${{ inputs.image }} \
-            --helm-set image.tag=${{ inputs.version }} \
+            --helm-set image.repository=${{ needs.build.outputs.image }} \
+            --helm-set image.tag=${{ needs.build.outputs.version }} \
             --sync-policy automated \
             --sync-option Prune=true \
             --sync-option SelfHeal=true \
