@@ -1,0 +1,113 @@
+name: "Docs"
+description: "Documentacao (API, runbook, onboarding, guias)"
+body:
+  - type: textarea
+    id: origem
+    attributes:
+      label: "Origem"
+      description: "Quem solicitou, por qual canal e link/referencia de rastreabilidade"
+      placeholder: "> 📌 @solicitante via Slack #canal — https://link-da-thread"
+      value: "> 📌 "
+    validations:
+      required: true
+
+  - type: textarea
+    id: contexto
+    attributes:
+      label: "Contexto"
+      description: "Por que esta documentacao e necessaria? O que esta faltando ou desatualizado?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: "Objetivo"
+      description: "O que estara documentado quando concluido? Onde sera publicado?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: escopo-inclui
+    attributes:
+      label: "Escopo — Inclui"
+      description: "O que sera documentado (bullets)"
+      value: |
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: escopo-nao-inclui
+    attributes:
+      label: "Escopo — Nao inclui"
+      description: "O que fica fora"
+      value: |
+        -
+    validations:
+      required: false
+
+  - type: textarea
+    id: criterios-aceitacao
+    attributes:
+      label: "Criterios de Aceitacao"
+      description: "Criterios verificaveis de que a documentacao esta completa"
+      value: |
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencias
+    attributes:
+      label: "Dependencias"
+      description: "Outras issues, sistemas, decisoes pendentes"
+      placeholder: "Nenhuma"
+    validations:
+      required: false
+
+  - type: textarea
+    id: referencias
+    attributes:
+      label: "Referencias"
+      description: "Links, docs existentes, fontes. Minimo 1 entrada."
+      value: |
+        -
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ### Classificacao (Project Fields)
+        Defaults para docs: Priority=P3, Compliance=Nao, Severity=N/A.
+        Ajuste se necessario.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Priority"
+      description: "Urgencia julgada (default P3 para docs)"
+      options:
+        - "P0 — Critica"
+        - "P1 — Alta"
+        - "P2 — Media"
+        - "P3 — Baixa"
+      default: 3
+    validations:
+      required: true
+
+  - type: dropdown
+    id: compliance
+    attributes:
+      label: "Compliance"
+      description: "Esta documentacao tem motivacao regulatoria ou fiscal?"
+      options:
+        - "Nao"
+        - "Vigente — obrigacao legal ja em producao"
+        - "<90d — prazo legal em ate 90 dias"
+        - ">90d — prazo legal > 90 dias ou data nao publicada"
+      default: 0
+    validations:
+      required: true

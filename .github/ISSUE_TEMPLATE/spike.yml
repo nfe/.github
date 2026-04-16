@@ -1,0 +1,113 @@
+name: "Spike"
+description: "Investigacao com prazo definido — entrega em documento/ADR, nao codigo"
+body:
+  - type: textarea
+    id: origem
+    attributes:
+      label: "Origem"
+      description: "Quem solicitou, por qual canal e link/referencia de rastreabilidade"
+      placeholder: "> 📌 @solicitante via Slack #canal — https://link-da-thread"
+      value: "> 📌 "
+    validations:
+      required: true
+
+  - type: textarea
+    id: contexto
+    attributes:
+      label: "Contexto"
+      description: "O que precisa ser investigado? Por que agora? Qual decisao depende desta spike?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: "Objetivo"
+      description: "Qual artefato sera entregue (ADR, doc, PoC)? Qual pergunta sera respondida?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: escopo-inclui
+    attributes:
+      label: "Escopo — Inclui"
+      description: "O que sera investigado (bullets)"
+      value: |
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: escopo-nao-inclui
+    attributes:
+      label: "Escopo — Nao inclui"
+      description: "O que fica fora — limites da investigacao"
+      value: |
+        -
+    validations:
+      required: false
+
+  - type: textarea
+    id: criterios-aceitacao
+    attributes:
+      label: "Criterios de Aceitacao"
+      description: "Criterios verificaveis de conclusao da spike"
+      value: |
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencias
+    attributes:
+      label: "Dependencias"
+      description: "Outras issues, sistemas, decisoes pendentes"
+      placeholder: "Nenhuma"
+    validations:
+      required: false
+
+  - type: textarea
+    id: referencias
+    attributes:
+      label: "Referencias"
+      description: "Links, docs, tickets, normas, threads. Minimo 1 entrada."
+      value: |
+        -
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ### Classificacao (Project Fields)
+        Defaults para spike: Priority=P2, Compliance=Nao, Severity=N/A.
+        Ajuste se necessario.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Priority"
+      description: "Urgencia julgada (default P2 para spikes)"
+      options:
+        - "P0 — Critica"
+        - "P1 — Alta"
+        - "P2 — Media"
+        - "P3 — Baixa"
+      default: 2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: compliance
+    attributes:
+      label: "Compliance"
+      description: "Esta spike tem motivacao regulatoria ou fiscal?"
+      options:
+        - "Nao"
+        - "Vigente — obrigacao legal ja em producao"
+        - "<90d — prazo legal em ate 90 dias"
+        - ">90d — prazo legal > 90 dias ou data nao publicada"
+      default: 0
+    validations:
+      required: true

@@ -1,0 +1,120 @@
+name: "Feature"
+description: "Nova funcionalidade visivel ao usuario/cliente"
+body:
+  - type: textarea
+    id: origem
+    attributes:
+      label: "Origem"
+      description: "Quem solicitou, por qual canal e link/referencia de rastreabilidade"
+      placeholder: "> 📌 @solicitante via Slack #canal — https://link-da-thread"
+      value: "> 📌 "
+    validations:
+      required: true
+
+  - type: textarea
+    id: contexto
+    attributes:
+      label: "Contexto"
+      description: "Por que esta issue existe? Qual problema resolve? O que acontece se nao fizer?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: "Objetivo"
+      description: "O que estara diferente quando concluida — resultado observavel, nao a tarefa a executar"
+    validations:
+      required: true
+
+  - type: textarea
+    id: escopo-inclui
+    attributes:
+      label: "Escopo — Inclui"
+      description: "O que sera feito (bullets)"
+      value: |
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: escopo-nao-inclui
+    attributes:
+      label: "Escopo — Nao inclui"
+      description: "O que fica fora — evita scope creep"
+      value: |
+        -
+    validations:
+      required: false
+
+  - type: textarea
+    id: criterios-aceitacao
+    attributes:
+      label: "Criterios de Aceitacao"
+      description: "Criterios verificaveis por terceiro sem perguntar nada (checkboxes)"
+      value: |
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencias
+    attributes:
+      label: "Dependencias"
+      description: "Outras issues, sistemas, decisoes pendentes, prazos externos"
+      placeholder: "Nenhuma"
+    validations:
+      required: false
+
+  - type: textarea
+    id: referencias
+    attributes:
+      label: "Referencias"
+      description: "Links, docs, tickets, normas, threads, PRs relacionados. Minimo 1 entrada."
+      value: |
+        -
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ### Classificacao (Project Fields)
+        Estes campos serao aplicados no Project "Work — Product & Engineering" durante a triagem.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Priority"
+      description: "Urgencia julgada pelo lider da area"
+      options:
+        - "P0 — Critica (prazo legal vigente, bloqueio total)"
+        - "P1 — Alta (proxima iteracao)"
+        - "P2 — Media (planejar em 2-3 iteracoes)"
+        - "P3 — Baixa (icebox)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: compliance
+    attributes:
+      label: "Compliance"
+      description: "Esta issue tem motivacao regulatoria ou fiscal?"
+      options:
+        - "Nao"
+        - "Vigente — obrigacao legal ja em producao"
+        - "<90d — prazo legal em ate 90 dias"
+        - ">90d — prazo legal > 90 dias ou data nao publicada"
+      default: 0
+    validations:
+      required: true
+
+  - type: input
+    id: deadline
+    attributes:
+      label: "Deadline"
+      description: "Data oficial publicada pelo orgao (AAAA-MM-DD). Deixe vazio se Compliance = Nao ou data nao publicada."
+      placeholder: "2026-07-01"
+    validations:
+      required: false

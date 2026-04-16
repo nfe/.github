@@ -1,0 +1,113 @@
+name: "Chore / Task"
+description: "Trabalho operacional sem mudanca de produto visivel (migracoes, desligamentos, CI/CD)"
+body:
+  - type: textarea
+    id: origem
+    attributes:
+      label: "Origem"
+      description: "Quem solicitou, por qual canal e link/referencia de rastreabilidade"
+      placeholder: "> 📌 @solicitante via Slack #canal — https://link-da-thread"
+      value: "> 📌 "
+    validations:
+      required: true
+
+  - type: textarea
+    id: contexto
+    attributes:
+      label: "Contexto"
+      description: "Por que este trabalho e necessario? O que acontece se nao fizer?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: "Objetivo"
+      description: "O que estara diferente quando concluido — resultado observavel"
+    validations:
+      required: true
+
+  - type: textarea
+    id: escopo-inclui
+    attributes:
+      label: "Escopo — Inclui"
+      description: "O que sera feito (bullets)"
+      value: |
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: escopo-nao-inclui
+    attributes:
+      label: "Escopo — Nao inclui"
+      description: "O que fica fora"
+      value: |
+        -
+    validations:
+      required: false
+
+  - type: textarea
+    id: criterios-aceitacao
+    attributes:
+      label: "Criterios de Aceitacao"
+      description: "Criterios verificaveis por terceiro sem perguntar nada (checkboxes)"
+      value: |
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencias
+    attributes:
+      label: "Dependencias"
+      description: "Outras issues, sistemas, decisoes pendentes"
+      placeholder: "Nenhuma"
+    validations:
+      required: false
+
+  - type: textarea
+    id: referencias
+    attributes:
+      label: "Referencias"
+      description: "Links, docs, tickets, threads. Minimo 1 entrada."
+      value: |
+        -
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ### Classificacao (Project Fields)
+        Defaults para chore/task: Priority=P2, Compliance=Nao, Severity=N/A.
+        Ajuste se necessario.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Priority"
+      description: "Urgencia julgada (default P2 para chore/task)"
+      options:
+        - "P0 — Critica"
+        - "P1 — Alta"
+        - "P2 — Media"
+        - "P3 — Baixa"
+      default: 2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: compliance
+    attributes:
+      label: "Compliance"
+      description: "Esta tarefa tem motivacao regulatoria ou fiscal?"
+      options:
+        - "Nao"
+        - "Vigente — obrigacao legal ja em producao"
+        - "<90d — prazo legal em ate 90 dias"
+        - ">90d — prazo legal > 90 dias ou data nao publicada"
+      default: 0
+    validations:
+      required: true

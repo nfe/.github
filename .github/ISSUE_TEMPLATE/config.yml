@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "Padrao de Issues"
+    url: "https://github.com/nfe/management/blob/main/operacional/Padrao_Issues.md"
+    about: "Leia o padrao antes de abrir uma issue"
