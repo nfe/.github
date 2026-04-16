@@ -54,41 +54,12 @@ jobs:
     environment: ${{ inputs.appName }}-${{ inputs.stage }}
     permissions:
       contents: read
-    outputs:
-      previousImage: ${{ steps.prev.outputs.image }}
-      previousTag: ${{ steps.prev.outputs.tag }}
-      isNewApp: ${{ steps.prev.outputs.isNew }}
     steps:
       - name: Install ArgoCD CLI
         run: |
           curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           sudo install -m 555 /tmp/argocd /usr/local/bin/argocd
           argocd version --client
-
-      - name: Capture current state
-        id: prev
-        run: |
-          APP=$(argocd app get "${{ inputs.appName }}" \
-            --app-namespace "${{ vars.ARGOCD_APP_NAMESPACE }}" \
-            --auth-token "${{ secrets.ARGOCD_AUTH_TOKEN }}" \
-            --server "${{ vars.ARGOCD_SERVER_URL }}" \
-            --grpc-web -o json 2>/dev/null || echo '{}')
-
-          if [ "$APP" = '{}' ]; then
-            echo "isNew=true" >> "$GITHUB_OUTPUT"
-            echo "No existing application found — first deploy."
-          else
-            echo "isNew=false" >> "$GITHUB_OUTPUT"
-            IMAGE=$(echo "$APP" | jq -r '
-              .spec.source.helm.parameters[]
-              | select(.name == "image.repository") | .value // empty')
-            TAG=$(echo "$APP" | jq -r '
-              .spec.source.helm.parameters[]
-              | select(.name == "image.tag") | .value // empty')
-            echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-            echo "Previous state: $IMAGE:$TAG"
-          fi
 
       - name: Upsert ArgoCD application
         env:
@@ -130,7 +101,6 @@ jobs:
     if: |
       always()
       && needs.deploy.result == 'failure'
-      && needs.deploy.outputs.isNewApp != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: rollback-approval
@@ -142,17 +112,26 @@ jobs:
           curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           sudo install -m 555 /tmp/argocd /usr/local/bin/argocd
 
-      - name: Revert to previous image
+      - name: Rollback to previous deployment
         id: revert
         continue-on-error: true
         run: |
-          echo "Rolling back to ${{ needs.deploy.outputs.previousImage }}:${{ needs.deploy.outputs.previousTag }}"
-          argocd app set "${{ inputs.appName }}" \
+          PREV_ID=$(argocd app history "${{ inputs.appName }}" \
             --auth-token "${{ secrets.ARGOCD_AUTH_TOKEN }}" \
             --server "${{ vars.ARGOCD_SERVER_URL }}" \
             --app-namespace "${{ vars.ARGOCD_APP_NAMESPACE }}" \
-            --helm-set image.repository=${{ needs.deploy.outputs.previousImage }} \
-            --helm-set image.tag=${{ needs.deploy.outputs.previousTag }} \
+            --grpc-web -o json | jq '.[1].id // empty')
+
+          if [ -z "$PREV_ID" ]; then
+            echo "::warning::No previous history entry — first deploy, nothing to rollback to"
+            exit 1
+          fi
+
+          echo "Rolling back to history entry $PREV_ID (auto-sync will be disabled)"
+          argocd app rollback "${{ inputs.appName }}" "$PREV_ID" \
+            --auth-token "${{ secrets.ARGOCD_AUTH_TOKEN }}" \
+            --server "${{ vars.ARGOCD_SERVER_URL }}" \
+            --app-namespace "${{ vars.ARGOCD_APP_NAMESPACE }}" \
             --grpc-web
 
       - name: Wait for rollback health
@@ -164,6 +143,5 @@ jobs:
             --server "${{ vars.ARGOCD_SERVER_URL }}" \
             --app-namespace "${{ vars.ARGOCD_APP_NAMESPACE }}" \
             --health \
-            --sync \
             --timeout 600 \
             --grpc-web
