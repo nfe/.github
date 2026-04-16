@@ -409,7 +409,7 @@ jobs:
       && !github.event.release.prerelease
     runs-on: windows-latest
     timeout-minutes: 30
-    environment: ${{ inputs.appName }}-${{ inputs.stage }}
+    environment: rollback-approval
     permissions:
       contents: read
 
