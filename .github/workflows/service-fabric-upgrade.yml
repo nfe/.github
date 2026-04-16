@@ -19,16 +19,15 @@ on:
         description: "Path to the ApplicationParameters file (e.g., Production.xml)"
         required: true
         type: string
-      tagPrefix:
-        description: "Release tag prefix used to extract the version (e.g., 'v' for 'v1.0.0', 'foundation-v' for 'foundation-v1.2.3')"
+      appName:
+        description: "App slug. Environment is '{appName}-{stage}'. Release tags must be '{appName}-v{semver}'."
+        required: true
+        type: string
+      stage:
+        description: "Deployment stage suffix (prod, staging, homolog). Composed with appName into '{appName}-{stage}'."
         required: false
         type: string
-        default: "v"
-      environment:
-        description: "GitHub environment name for the deploy job (enables protection rules)"
-        required: false
-        type: string
-        default: "Production"
+        default: "prod"
       healthCheckWaitSec:
         description: "Seconds SF waits before the first health check after each upgrade domain"
         required: false
@@ -71,7 +70,7 @@ on:
         required: true
 
 concurrency:
-  group: sf-deploy-${{ github.repository }}-${{ inputs.environment }}-${{ inputs.sfproj }}
+  group: sf-deploy-${{ github.repository }}-${{ inputs.appName }}-${{ inputs.stage }}
   cancel-in-progress: false
 
 jobs:
@@ -92,9 +91,14 @@ jobs:
         id: version
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#${{ inputs.tagPrefix }}}"
+          PREFIX="${{ inputs.appName }}-v"
+          if [[ "$GITHUB_REF_NAME" != "$PREFIX"* ]]; then
+            echo "::error::Release tag '$GITHUB_REF_NAME' does not start with expected prefix '$PREFIX'"
+            exit 1
+          fi
+          VERSION="${GITHUB_REF_NAME#$PREFIX}"
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
-            echo "::error::Invalid version extracted from tag '$GITHUB_REF_NAME' (prefix '${{ inputs.tagPrefix }}'): '$VERSION'"
+            echo "::error::Invalid version extracted from tag '$GITHUB_REF_NAME' (prefix '$PREFIX'): '$VERSION'"
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -181,7 +185,7 @@ jobs:
     if: "!github.event.release.prerelease"
     runs-on: windows-latest
     timeout-minutes: 60
-    environment: ${{ inputs.environment }}
+    environment: ${{ inputs.appName }}-${{ inputs.stage }}
     permissions:
       contents: read
     outputs:
@@ -411,7 +415,7 @@ jobs:
       && !github.event.release.prerelease
     runs-on: windows-latest
     timeout-minutes: 30
-    environment: ${{ inputs.environment }}
+    environment: ${{ inputs.appName }}-${{ inputs.stage }}
     permissions:
       contents: read
 

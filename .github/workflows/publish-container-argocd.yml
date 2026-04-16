@@ -4,9 +4,14 @@ on:
   workflow_call:
     inputs:
       appName:
-        description: "ArgoCD application name (e.g., xml2pdf-api)"
+        description: "ArgoCD application name (e.g., xml2pdf-api). Also used as prefix for the GitHub environment '{appName}-{stage}'."
         required: true
         type: string
+      stage:
+        description: "Deployment stage suffix (prod, staging, homolog). Composed with appName into the GitHub environment '{appName}-{stage}'."
+        required: false
+        type: string
+        default: "prod"
       namespace:
         description: "Target Kubernetes namespace"
         required: true
@@ -39,13 +44,14 @@ on:
         required: true
 
 concurrency:
-  group: argocd-${{ inputs.appName }}-${{ inputs.namespace }}
+  group: argocd-${{ github.repository }}-${{ inputs.appName }}-${{ inputs.stage }}
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: ${{ inputs.appName }}-${{ inputs.stage }}
     permissions:
       contents: read
     steps:
