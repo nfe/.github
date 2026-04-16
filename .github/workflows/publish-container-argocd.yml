@@ -133,7 +133,7 @@ jobs:
       && needs.deploy.outputs.isNewApp != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: ${{ inputs.appName }}-${{ inputs.stage }}
+    environment: rollback-approval
     permissions:
       contents: read
     steps:
