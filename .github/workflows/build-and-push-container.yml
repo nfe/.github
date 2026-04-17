@@ -23,7 +23,7 @@ on:
         type: string
         default: "."
       extraBuildArgs:
-        description: "Additional --build-arg entries, one per line (key=value)"
+        description: "Additional --build-arg entries, one per line (key=value). Layered on top of VERSION, GITHUB_USERNAME and GITHUB_PACKAGES_TOKEN which are always passed."
         required: false
         type: string
         default: ""
@@ -85,6 +85,8 @@ jobs:
           push: true
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
+            GITHUB_USERNAME=${{ github.actor }}
+            GITHUB_PACKAGES_TOKEN=${{ secrets.GITHUB_TOKEN }}
             ${{ inputs.extraBuildArgs }}
           tags: |
             ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
