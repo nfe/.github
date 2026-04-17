@@ -8,7 +8,7 @@ Aplica-se a qualquer repositório da organização `nfe` cujos artefatos vão pa
 
 ## 1. 🏷️ Tags e versionamento
 
-- **Prefixo da tag de release**: `<produto>-<tipo>-v<semver>` (ex.: `xml2pdf-api-v1.2.0`, `nfse-worker-v3.4.1`). `<tipo>` é o papel do artefato — `api`, `worker`, `job`, `app`, etc. Sempre — mesmo quando o repositório entrega apenas um artefato. `v<semver>` sem prefixo **não** é usado; o prefixo mantém repositórios com múltiplos artefatos sem ambiguidade e acomoda novos artefatos no futuro sem renomeação disruptiva.
+- **Prefixo da tag de release**: `<produto>-<tipo>-v<semver>` (ex.: `xml2pdf-api-v1.2.0`, `nfse-app-v3.4.1`). `<tipo>` é o papel do artefato — `api`, `worker`, `job`, `app`, etc. Sempre — mesmo quando o repositório entrega apenas um artefato. `v<semver>` sem prefixo **não** é usado; o prefixo mantém repositórios com múltiplos artefatos sem ambiguidade e acomoda novos artefatos no futuro sem renomeação disruptiva.
 - **Somente SemVer** — `MAJOR.MINOR.PATCH`. Os workflows reutilizáveis rejeitam tags fora do padrão SemVer.
 - **A versão do artefato é derivada da tag** — nunca fixada no código-fonte.
 
