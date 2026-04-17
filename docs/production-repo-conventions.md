@@ -1,76 +1,76 @@
-# 📘 Production repository conventions
+# 📘 Convenções para repositórios de produção
 
-Applies to any repo in the `nfe` organization whose artifacts ship to production — containers deployed via ArgoCD, NuGet packages published to GitHub Packages, or Service Fabric applications. Adopt these conventions when creating a new production repo or migrating an existing one.
+Aplica-se a qualquer repositório da organização `nfe` cujos artefatos vão para produção — contêineres implantados via ArgoCD, pacotes NuGet publicados no GitHub Packages ou aplicações Service Fabric. Adote estas convenções ao criar um novo repositório de produção ou ao migrar um existente.
 
 ---
 
-# All production repositories
+# Todos os repositórios de produção
 
-## 1. 🏷️ Tagging and versioning
+## 1. 🏷️ Tags e versionamento
 
-- **Release tag prefix**: `<product>-<type>-v<semver>` (e.g., `xml2pdf-api-v1.2.0`, `nfse-worker-v3.4.1`). `<type>` is the artifact role — `api`, `worker`, `job`, `app`, etc. Always used — even when the repo ships a single artifact. Bare `v<semver>` is **not** used; the prefix keeps multi-artifact repos unambiguous and scales to additional artifacts added later without a breaking rename.
-- **SemVer only** — `MAJOR.MINOR.PATCH`. The reusable workflows reject non-SemVer tags.
-- **Artifact version is derived from the tag** — never hardcoded in source.
+- **Prefixo da tag de release**: `<produto>-<tipo>-v<semver>` (ex.: `xml2pdf-api-v1.2.0`, `nfse-worker-v3.4.1`). `<tipo>` é o papel do artefato — `api`, `worker`, `job`, `app`, etc. Sempre — mesmo quando o repositório entrega apenas um artefato. `v<semver>` sem prefixo **não** é usado; o prefixo mantém repositórios com múltiplos artefatos sem ambiguidade e acomoda novos artefatos no futuro sem renomeação disruptiva.
+- **Somente SemVer** — `MAJOR.MINOR.PATCH`. Os workflows reutilizáveis rejeitam tags fora do padrão SemVer.
+- **A versão do artefato é derivada da tag** — nunca fixada no código-fonte.
 
-## 2. 📁 Repository layout
+## 2. 📁 Layout do repositório
 
-| Path | Purpose |
+| Caminho | Propósito |
 |---|---|
-| `Dockerfile` | One per deployable app; multi-stage (see §4) |
-| `kubernetes/values-<stage>.yaml` | Helm values per stage (container track) |
-| `.github/workflows/pr.yml` | PR validation |
-| `.github/workflows/publish-*.yml` | Release-triggered publish, one file per release prefix |
+| `Dockerfile` | Um por aplicação implantável; multi-stage (ver §4) |
+| `kubernetes/values-<stage>.yaml` | Valores Helm por stage (trilha de contêiner) |
+| `.github/workflows/pr.yml` | Validação de PR |
+| `.github/workflows/publish-*.yml` | Publicação disparada por release, um arquivo por prefixo de tag |
 
-## 3. ⚙️ Reusable workflows
+## 3. ⚙️ Workflows reutilizáveis
 
-All shared reusables live in `nfe/.github/.github/workflows/`. Callers should be thin wrappers — no logic beyond input wiring and the release-prefix gate `if: startsWith(github.event.release.tag_name, '<product>-<type>-v')`. See each workflow file for its full input/secret surface.
+Todos os workflows reutilizáveis compartilhados ficam em `nfe/.github/.github/workflows/`. Os callers devem ser wrappers finos — sem lógica além da passagem de inputs e do gate de prefixo de release `if: startsWith(github.event.release.tag_name, '<produto>-<tipo>-v')`. Consulte cada arquivo para a superfície completa de inputs/secrets.
 
-| Workflow | Purpose |
+| Workflow | Propósito |
 |---|---|
-| 🐳 [`build-and-push-container.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/build-and-push-container.yml) | Builds a container image and pushes it to GHCR; emits the extracted version for downstream jobs. |
-| 🚀 [`publish-container-argocd.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/publish-container-argocd.yml) | Upserts the ArgoCD application with a given image tag, waits for healthy sync, and gates rollback via the `rollback-approval` environment. |
-| 📦 [`publish-nuget.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/publish-nuget.yml) | Builds, packs, and publishes a .NET project to GitHub Packages; attaches the `.nupkg` to the release. |
-| 🔷 [`service-fabric-upgrade.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/service-fabric-upgrade.yml) | Monitored in-place upgrade of a Service Fabric application; SF auto-reverts on health failure. |
-| 🔷 [`service-fabric-recreate.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/service-fabric-recreate.yml) | Tears down and recreates a Service Fabric application — for manifest changes incompatible with in-place upgrade. |
-| ✅ [`validate-dotnet.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/validate-dotnet.yml) | Restores, builds, and optionally tests a .NET solution on PR. |
+| 🐳 [`build-and-push-container.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/build-and-push-container.yml) | Constrói uma imagem de contêiner e faz push para o GHCR; expõe a versão extraída para jobs subsequentes. |
+| 🚀 [`publish-container-argocd.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/publish-container-argocd.yml) | Faz upsert da aplicação ArgoCD com uma tag de imagem específica, aguarda sync saudável e controla o rollback via o environment `rollback-approval`. |
+| 📦 [`publish-nuget.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/publish-nuget.yml) | Compila, empacota e publica um projeto .NET no GitHub Packages; anexa o `.nupkg` à release. |
+| 🔷 [`service-fabric-upgrade.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/service-fabric-upgrade.yml) | Upgrade in-place monitorado de uma aplicação Service Fabric; o SF reverte automaticamente em caso de falha de health check. |
+| 🔷 [`service-fabric-recreate.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/service-fabric-recreate.yml) | Remove e recria uma aplicação Service Fabric — para mudanças de manifesto incompatíveis com upgrade in-place. |
+| ✅ [`validate-dotnet.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/validate-dotnet.yml) | Restaura, compila e, opcionalmente, testa uma solution .NET em PRs. |
 
-## 4. 🐳 Dockerfile conventions
+## 4. 🐳 Convenções de Dockerfile
 
-Required regardless of base image choice or language:
+Obrigatório independentemente da imagem base ou da linguagem:
 
-- **`ARG VERSION`** declared at the top; the builder stage stamps it into the artifact.
-- **OCI labels** on the final stage:
+- **`ARG VERSION`** declarado no topo; o stage de build grava a versão no artefato.
+- **Labels OCI** no stage final:
   - `org.opencontainers.image.version=$VERSION`
   - `org.opencontainers.image.source=https://github.com/nfe/<repo>`
   - `org.opencontainers.image.revision=$REVISION`
-- **Non-root `USER`** — declare one explicitly unless the base image already runs as non-root.
-- **Multi-stage** — separate builder from runtime; runtime image carries only what's needed to run.
-- **No inline versions** — toolchain version comes from a lockfile/pin file, artifact version from `ARG VERSION`.
+- **`USER` não-root** — declare um explicitamente, a menos que a imagem base já execute como não-root.
+- **Multi-stage** — separe o stage de build do de runtime; a imagem de runtime deve conter apenas o necessário para executar.
+- **Sem versões inline** — a versão do toolchain vem de um arquivo de lockfile/pin, a versão do artefato vem do `ARG VERSION`.
 
-Structure beyond these invariants (system packages, build order, layer caching) is evaluated case-by-case — only refactor when there is a concrete reason.
+A estrutura além desses invariantes (pacotes do sistema, ordem de build, cache de layers) é avaliada caso a caso — refatore apenas quando houver um motivo concreto.
 
-## 5. ⎈ Helm chart (container track)
+## 5. ⎈ Helm chart (trilha de contêiner)
 
-Required values in `kubernetes/values-<stage>.yaml`:
+Valores obrigatórios em `kubernetes/values-<stage>.yaml`:
 
 - `image.repository: ghcr.io/nfe/<repo-name>`
-- `imagePullSecrets: [{ name: "ghcr-nfe" }]` — ⚠️ **mandatory**, otherwise pods enter `ImagePullBackOff`. The `ghcr-nfe` secret is sync'd into each namespace by platform.
+- `imagePullSecrets: [{ name: "ghcr-nfe" }]` — ⚠️ **obrigatório**, caso contrário os pods entram em `ImagePullBackOff`. O secret `ghcr-nfe` é sincronizado em cada namespace pela plataforma.
 
-Everything else (probes, `ASPNETCORE_URLS`, ExternalSecrets, HPA, node selectors) is app-specific and not standardised.
+Todo o restante (probes, `ASPNETCORE_URLS`, ExternalSecrets, HPA, node selectors) é específico da aplicação e não está padronizado.
 
-## 6. 🛡️ GitHub repository settings
+## 6. 🛡️ Configurações do repositório no GitHub
 
 ### 🌐 Environments
 
-Create upfront rather than relying on GitHub's first-deploy auto-creation:
+Crie antecipadamente em vez de depender da criação automática do GitHub no primeiro deploy:
 
-- **`<product>-<type>-<stage>`** (e.g., `xml2pdf-api-prod`) — per-deployment environment, no reviewers.
+- **`<produto>-<tipo>-<stage>`** (ex.: `xml2pdf-api-prod`) — environment de deploy, sem reviewers.
 
   ```bash
-  gh api -X PUT repos/nfe/<repo>/environments/<product>-<type>-<stage>
+  gh api -X PUT repos/nfe/<repo>/environments/<produto>-<tipo>-<stage>
   ```
 
-- **`rollback-approval`** — shared rollback gate, one per repo. Reviewer: `Product & Engineering` team (id `963507`). `prevent_self_review: false` is intentional — on-call can approve their own rollback without paging a peer.
+- **`rollback-approval`** — gate de rollback compartilhado, um por repositório. Reviewer: time `Product & Engineering` (id `963507`). `prevent_self_review: false` é intencional — durante um incidente, o on-call pode aprovar seu próprio rollback sem precisar chamar um colega.
 
   ```bash
   cat <<'EOF' > /tmp/rollback-env.json
@@ -84,9 +84,9 @@ Create upfront rather than relying on GitHub's first-deploy auto-creation:
   gh api -X PUT repos/nfe/<repo>/environments/rollback-approval --input /tmp/rollback-env.json
   ```
 
-### 🔒 Branch ruleset
+### 🔒 Ruleset do branch
 
-Enforce PR validation on the default branch:
+Impõe validação de PR no branch padrão:
 
 ```bash
 gh api repos/nfe/<repo>/rulesets --method POST --input - <<'EOF'
@@ -111,76 +111,76 @@ gh api repos/nfe/<repo>/rulesets --method POST --input - <<'EOF'
 EOF
 ```
 
-### 👥 Team access
+### 👥 Acesso do time
 
-Grant `Product & Engineering` at least `write` on every production repo — environment reviewer evaluation relies on it.
+Conceda ao time `Product & Engineering` no mínimo permissão `write` em todo repositório de produção — a avaliação de reviewer de environment depende disso.
 
-## 7. 🔐 Organization-level secrets and variables
+## 7. 🔐 Secrets e variáveis em nível de organização
 
-All callers inherit these org-level values — do not duplicate per repo:
+Todos os callers herdam estes valores em nível de organização — não duplique por repositório:
 
-| Name | Kind | Track |
+| Nome | Tipo | Trilha |
 |---|---|---|
-| `ARGOCD_SERVER_URL` | Variable | container + ArgoCD |
-| `ARGOCD_APP_NAMESPACE` | Variable | container + ArgoCD |
-| `ARGOCD_PROJECT` | Variable | container + ArgoCD |
-| `ARGOCD_DESTINATION_CLUSTER` | Variable | container + ArgoCD |
-| `ARGOCD_AUTH_TOKEN` | Secret | container + ArgoCD |
-| `SF_CLUSTER_ENDPOINT` | Variable | Service Fabric |
-| `SF_CLUSTER_SERVER_CERT_THUMBPRINT` | Variable | Service Fabric |
+| `ARGOCD_SERVER_URL` | Variável | contêiner + ArgoCD |
+| `ARGOCD_APP_NAMESPACE` | Variável | contêiner + ArgoCD |
+| `ARGOCD_PROJECT` | Variável | contêiner + ArgoCD |
+| `ARGOCD_DESTINATION_CLUSTER` | Variável | contêiner + ArgoCD |
+| `ARGOCD_AUTH_TOKEN` | Secret | contêiner + ArgoCD |
+| `SF_CLUSTER_ENDPOINT` | Variável | Service Fabric |
+| `SF_CLUSTER_SERVER_CERT_THUMBPRINT` | Variável | Service Fabric |
 | `SF_CLUSTER_CERT_PFX_BASE64` | Secret | Service Fabric |
 | `SF_CLUSTER_CERT_PASSWORD` | Secret | Service Fabric |
 
-## 8. 🚀 Release and rollback
+## 8. 🚀 Release e rollback
 
 ### 📦 NuGet
 
-Tag-driven. The workflow builds, packs, and publishes to GitHub Packages. Packages are immutable — there is no rollback; fix-forward with a new patch version.
+Disparado por tag. O workflow compila, empacota e publica no GitHub Packages. Pacotes são imutáveis — não há rollback; corrija com uma nova versão patch.
 
 ```mermaid
 flowchart LR
-  A[Create release<br/><product>-<type>-v<semver>] --> B[Build & pack]
-  B --> C[Push to<br/>GitHub Packages]
+  A[Criar release<br/><produto>-<tipo>-v<semver>] --> B[Compilar e empacotar]
+  B --> C[Push para<br/>GitHub Packages]
 ```
 
-### 🐳 ArgoCD (container + Kubernetes)
+### 🐳 ArgoCD (contêiner + Kubernetes)
 
 ```mermaid
 flowchart LR
-  A[Create release<br/><product>-<type>-v<semver>] --> B[Build image]
-  B --> C[Push to<br/>ghcr.io/nfe/<repo>]
-  C --> D[ArgoCD app upsert & sync]
+  A[Criar release<br/><produto>-<tipo>-v<semver>] --> B[Build da imagem]
+  B --> C[Push para<br/>ghcr.io/nfe/<repo>]
+  C --> D[ArgoCD upsert e sync]
   D --> E{argocd<br/>app wait}
-  E -->|healthy| F[✅ Success]
-  E -->|timeout / fail| G[Request approval<br/>rollback-approval]
-  G -->|approved| H[argocd app rollback<br/>to previous revision]
-  H --> I[App OutOfSync<br/>next release re-syncs]
+  E -->|saudável| F[✅ Sucesso]
+  E -->|timeout / falha| G[Solicitar aprovação<br/>rollback-approval]
+  G -->|aprovado| H[argocd app rollback<br/>para revisão anterior]
+  H --> I[App OutOfSync<br/>próxima release re-sincroniza]
 ```
 
-StatefulSets don't auto-roll-back on `ImagePullBackOff`; the `rollback-approval` gate is the only recovery path for those.
+StatefulSets não fazem rollback automático em `ImagePullBackOff`; o gate `rollback-approval` é o único caminho de recuperação nesses casos.
 
 ### 🔷 Service Fabric
 
-Service Fabric's monitored upgrade handles rollback automatically via health evaluation. On health failure during the rolling upgrade, SF reverts the application to the previous version without any workflow-level gate. Workflow-level rollback (`rollback-approval`) covers the non-SF-managed cases — cert failures, package-copy failures, cluster unreachable.
+O upgrade monitorado do Service Fabric faz rollback automaticamente via avaliação de health. Em caso de falha durante o rolling upgrade, o SF reverte a aplicação para a versão anterior sem nenhum gate no nível do workflow. O rollback no nível do workflow (`rollback-approval`) cobre os casos não gerenciados pelo SF — falhas de certificado, falhas na cópia do pacote, cluster inacessível.
 
 ```mermaid
 flowchart LR
-  A[Create release<br/><product>-<type>-v<semver>] --> B[Build & package<br/>.sfpkg]
-  B --> C[Trigger monitored<br/>upgrade]
-  C --> D{SF health<br/>evaluation}
-  D -->|healthy| E[✅ Success]
-  D -->|unhealthy| F[🔄 SF auto-reverts<br/>to previous version]
-  C -->|workflow failure| G[Request approval<br/>rollback-approval]
-  G -->|approved| H[Downgrade / remove<br/>application]
+  A[Criar release<br/><produto>-<tipo>-v<semver>] --> B[Compilar e empacotar<br/>.sfpkg]
+  B --> C[Disparar upgrade<br/>monitorado]
+  C --> D{Avaliação de<br/>health do SF}
+  D -->|saudável| E[✅ Sucesso]
+  D -->|não saudável| F[🔄 SF reverte automaticamente<br/>para a versão anterior]
+  C -->|falha de workflow| G[Solicitar aprovação<br/>rollback-approval]
+  G -->|aprovado| H[Downgrade / remover<br/>aplicação]
 ```
 
 ---
 
-# .NET repositories
+# Repositórios .NET
 
-## 📌 SDK pin
+## 📌 Fixação do SDK
 
-`global.json` at the repo root pins the SDK version. Match the TFM — e.g., `8.0.100` for `net8.0`.
+O `global.json` na raiz do repositório fixa a versão do SDK. Use a versão correspondente ao TFM — ex.: `8.0.100` para `net8.0`.
 
 ```json
 {
@@ -191,13 +191,13 @@ flowchart LR
 }
 ```
 
-## 🏷️ Versioning
+## 🏷️ Versionamento
 
-Never hardcode `<AssemblyVersion>` or `<FileVersion>` in `.csproj`. The version flows from the release tag through MSBuild via `/p:Version=<semver>`. The Dockerfile builder stage must forward `ARG VERSION` to the build: `dotnet publish ... /p:Version=${VERSION}`.
+Nunca fixe `<AssemblyVersion>` ou `<FileVersion>` no `.csproj`. A versão flui da tag de release através do MSBuild via `/p:Version=<semver>`. O stage de build do Dockerfile deve repassar `ARG VERSION` para o comando: `dotnet publish ... /p:Version=${VERSION}`.
 
-## 📦 Private packages
+## 📦 Pacotes privados
 
-If the repo consumes private `nfe` NuGet packages, add this `nuget.config` at the repo root:
+Se o repositório consome pacotes NuGet privados da `nfe`, adicione este `nuget.config` na raiz:
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -216,8 +216,8 @@ If the repo consumes private `nfe` NuGet packages, add this `nuget.config` at th
 </configuration>
 ```
 
-The `publish-nuget.yml` and `validate-dotnet.yml` reusables inject `GITHUB_USERNAME` and `GITHUB_PACKAGES_TOKEN` at restore time.
+Os workflows reutilizáveis `publish-nuget.yml` e `validate-dotnet.yml` injetam `GITHUB_USERNAME` e `GITHUB_PACKAGES_TOKEN` no momento do restore.
 
-## ✅ PR validation
+## ✅ Validação de PR
 
-Call `nfe/.github/.github/workflows/validate-dotnet.yml` from `.github/workflows/pr.yml`. Tests run by default; set `skipTests: true` only when unavoidable.
+Chame `nfe/.github/.github/workflows/validate-dotnet.yml` a partir de `.github/workflows/pr.yml`. Os testes rodam por padrão; defina `skipTests: true` apenas quando inevitável.
