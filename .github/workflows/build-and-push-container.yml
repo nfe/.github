@@ -22,16 +22,6 @@ on:
         required: false
         type: string
         default: "."
-      extraBuildArgs:
-        description: "Additional --build-arg entries, one per line (key=value)"
-        required: false
-        type: string
-        default: ""
-      extraLabels:
-        description: "Additional OCI labels, one per line (key=value)"
-        required: false
-        type: string
-        default: ""
     outputs:
       version:
         description: "Extracted SemVer (no prefix)"
@@ -85,7 +75,9 @@ jobs:
           push: true
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
-            ${{ inputs.extraBuildArgs }}
+            GITHUB_USERNAME=${{ github.actor }}
+          secrets: |
+            github_packages_token=${{ secrets.GITHUB_TOKEN }}
           tags: |
             ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
             ${{ env.IMAGE }}:latest
@@ -93,4 +85,3 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
-            ${{ inputs.extraLabels }}
