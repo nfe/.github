@@ -17,7 +17,7 @@ Aplica-se a qualquer repositório da organização `nfe` cujos artefatos vão pa
 | Caminho | Propósito |
 |---|---|
 | `Dockerfile` | Um por aplicação implantável; multi-stage (ver §4) |
-| `kubernetes/values-<stage>.yaml` | Valores Helm por stage (trilha de contêiner) |
+| `kubernetes/values-<ambiente>.yaml` | Valores Helm por ambiente (ex.: `values-production.yaml` — default de `valuesFile` no `publish-container-argocd.yml`) |
 | `.github/workflows/pr.yml` | Validação de PR |
 | `.github/workflows/publish-*.yml` | Publicação disparada por release, um arquivo por prefixo de tag |
 
@@ -38,11 +38,8 @@ Todos os workflows reutilizáveis compartilhados ficam em `nfe/.github/.github/w
 
 Obrigatório independentemente da imagem base ou da linguagem:
 
-- **`ARG VERSION`** declarado no topo; o stage de build grava a versão no artefato.
-- **Labels OCI** no stage final:
-  - `org.opencontainers.image.version=$VERSION`
-  - `org.opencontainers.image.source=https://github.com/nfe/<repo>`
-  - `org.opencontainers.image.revision=$REVISION`
+- **`ARG VERSION`** declarado no topo; o stage de build grava a versão no artefato (ex.: `dotnet publish /p:Version=${VERSION}`).
+- **Labels OCI** (`org.opencontainers.image.version`, `.source`, `.revision`) são aplicadas pelo `build-and-push-container.yml` via `--label` no push — **não** declare essas labels no Dockerfile (seriam sobrescritas, e `$REVISION` ficaria vazio por não ser passado como build-arg).
 - **`USER` não-root** — declare um explicitamente, a menos que a imagem base já execute como não-root.
 - **Multi-stage** — separe o stage de build do de runtime; a imagem de runtime deve conter apenas o necessário para executar.
 - **Sem versões inline** — a versão do toolchain vem de um arquivo de lockfile/pin, a versão do artefato vem do `ARG VERSION`.
@@ -51,7 +48,7 @@ A estrutura além desses invariantes (pacotes do sistema, ordem de build, cache 
 
 ## 5. ⎈ Helm chart (trilha de contêiner)
 
-Valores obrigatórios em `kubernetes/values-<stage>.yaml`:
+Valores obrigatórios no arquivo de values Helm do ambiente alvo (por padrão `kubernetes/values-production.yaml`, conforme o default de `valuesFile` no `publish-container-argocd.yml` — outros ambientes requerem override do input `valuesFile` no caller):
 
 - `image.repository: ghcr.io/nfe/<repo-name>`
 - `imagePullSecrets: [{ name: "ghcr-nfe" }]` — ⚠️ **obrigatório**, caso contrário os pods entram em `ImagePullBackOff`. O secret `ghcr-nfe` é sincronizado em cada namespace pela plataforma.
@@ -139,7 +136,7 @@ Disparado por tag. O workflow compila, empacota e publica no GitHub Packages. Pa
 
 ```mermaid
 flowchart LR
-  A[Criar release<br/><produto>-<tipo>-v<semver>] --> B[Compilar e empacotar]
+  A[Criar release<br/>&lt;produto&gt;-&lt;tipo&gt;-v&lt;semver&gt;] --> B[Compilar e empacotar]
   B --> C[Push para<br/>GitHub Packages]
 ```
 
@@ -147,8 +144,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  A[Criar release<br/><produto>-<tipo>-v<semver>] --> B[Build da imagem]
-  B --> C[Push para<br/>ghcr.io/nfe/<repo>]
+  A[Criar release<br/>&lt;produto&gt;-&lt;tipo&gt;-v&lt;semver&gt;] --> B[Build da imagem]
+  B --> C[Push para<br/>ghcr.io/nfe/&lt;repo&gt;]
   C --> D[ArgoCD upsert e sync]
   D --> E{argocd<br/>app wait}
   E -->|saudável| F[✅ Sucesso]
@@ -165,7 +162,7 @@ O upgrade monitorado do Service Fabric faz rollback automaticamente via avaliaç
 
 ```mermaid
 flowchart LR
-  A[Criar release<br/><produto>-<tipo>-v<semver>] --> B[Compilar e empacotar<br/>.sfpkg]
+  A[Criar release<br/>&lt;produto&gt;-&lt;tipo&gt;-v&lt;semver&gt;] --> B[Compilar e empacotar<br/>.sfpkg]
   B --> C[Disparar upgrade<br/>monitorado]
   C --> D{Avaliação de<br/>health do SF}
   D -->|saudável| E[✅ Sucesso]
