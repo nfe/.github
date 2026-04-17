@@ -46,7 +46,7 @@ Obrigatório independentemente da imagem base ou da linguagem:
 
 A estrutura além desses invariantes (pacotes do sistema, ordem de build, cache de layers) é avaliada caso a caso — refatore apenas quando houver um motivo concreto.
 
-## 5. ⎈ Helm chart (trilha de contêiner)
+## 5. ⎈ Helm chart
 
 Valores obrigatórios no arquivo de values Helm do ambiente alvo (por padrão `kubernetes/values-production.yaml`, conforme o default de `valuesFile` no `publish-container-argocd.yml` — outros ambientes requerem override do input `valuesFile` no caller):
 
