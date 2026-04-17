@@ -81,7 +81,7 @@ body:
       value: |
         ---
         ### Classificacao (Project Fields)
-        Estes campos serao aplicados no Project "Work — Product & Engineering" durante a triagem.
+        Estes campos serao aplicados no Project "Work - Product & Engineering" durante a triagem.
 
   - type: dropdown
     id: priority
