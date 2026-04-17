@@ -30,8 +30,8 @@ Todos os workflows reutilizáveis compartilhados ficam em `nfe/.github/.github/w
 | 🐳 [`build-and-push-container.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/build-and-push-container.yml) | Constrói uma imagem de contêiner e faz push para o GHCR; expõe a versão extraída para jobs subsequentes. |
 | 🚀 [`publish-container-argocd.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/publish-container-argocd.yml) | Faz upsert da aplicação ArgoCD com uma tag de imagem específica, aguarda sync saudável e controla o rollback via o environment `rollback-approval`. |
 | 📦 [`publish-nuget.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/publish-nuget.yml) | Compila, empacota e publica um projeto .NET no GitHub Packages; anexa o `.nupkg` à release. |
-| 🔷 [`service-fabric-upgrade.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/service-fabric-upgrade.yml) | Upgrade in-place monitorado de uma aplicação Service Fabric; o SF reverte automaticamente em caso de falha de health check. |
-| 🔷 [`service-fabric-recreate.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/service-fabric-recreate.yml) | Remove e recria uma aplicação Service Fabric — para mudanças de manifesto incompatíveis com upgrade in-place. |
+| 🔷 [`service-fabric-upgrade.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/service-fabric-upgrade.yml) | Upgrade monitorado **sem downtime** — o SF atualiza um Upgrade Domain (UD) por vez. Use para serviços que não podem ficar indisponíveis durante o deploy. Reverte automaticamente em caso de falha de health check. |
+| 🔷 [`service-fabric-recreate.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/service-fabric-recreate.yml) | Remove a versão atual e cria a nova do zero — **sujeito a downtime**. Use para serviços de background que toleram uma janela de indisponibilidade durante o deploy. |
 | ✅ [`validate-dotnet.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/validate-dotnet.yml) | Restaura, compila e, opcionalmente, testa uma solution .NET em PRs. |
 
 ## 4. 🐳 Convenções de Dockerfile
