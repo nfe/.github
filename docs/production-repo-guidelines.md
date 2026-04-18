@@ -118,11 +118,11 @@ Todos os callers herdam estes valores em nível de organização — não dupliq
 
 | Nome | Tipo | Trilha |
 |---|---|---|
-| `ARGOCD_SERVER_URL` | Variável | contêiner + ArgoCD |
-| `ARGOCD_APP_NAMESPACE` | Variável | contêiner + ArgoCD |
-| `ARGOCD_PROJECT` | Variável | contêiner + ArgoCD |
-| `ARGOCD_DESTINATION_CLUSTER` | Variável | contêiner + ArgoCD |
-| `ARGOCD_AUTH_TOKEN` | Secret | contêiner + ArgoCD |
+| `ARGOCD_SERVER_URL` | Variável | ArgoCD |
+| `ARGOCD_APP_NAMESPACE` | Variável | ArgoCD |
+| `ARGOCD_PROJECT` | Variável | ArgoCD |
+| `ARGOCD_DESTINATION_CLUSTER` | Variável | ArgoCD |
+| `ARGOCD_AUTH_TOKEN` | Secret | ArgoCD |
 | `SF_CLUSTER_ENDPOINT` | Variável | Service Fabric |
 | `SF_CLUSTER_SERVER_CERT_THUMBPRINT` | Variável | Service Fabric |
 | `SF_CLUSTER_CERT_PFX_BASE64` | Secret | Service Fabric |
