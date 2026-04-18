@@ -1,4 +1,4 @@
-# 📘 Convenções para repositórios de produção
+# 📘 Guia para repositórios de produção
 
 Aplica-se a qualquer repositório da organização `nfe` cujos artefatos vão para produção — contêineres implantados via ArgoCD, pacotes NuGet publicados no GitHub Packages ou aplicações Service Fabric. Adote estas convenções ao criar um novo repositório de produção ou ao migrar um existente.
 
