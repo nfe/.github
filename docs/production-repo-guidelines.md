@@ -30,9 +30,11 @@ Todos os workflows reutilizáveis compartilhados ficam em `nfe/.github/.github/w
 | 🐳 [`build-and-push-container.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/build-and-push-container.yml) | Constrói uma imagem de contêiner e faz push para o GHCR; expõe a versão extraída para jobs subsequentes. |
 | 🚀 [`publish-container-argocd.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/publish-container-argocd.yml) | Faz upsert da aplicação ArgoCD com uma tag de imagem específica, aguarda sync saudável e controla o rollback via o environment `rollback-approval`. |
 | 📦 [`publish-nuget.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/publish-nuget.yml) | Compila, empacota e publica um projeto .NET no GitHub Packages; anexa o `.nupkg` à release. |
+| ☁️ [`publish-cloudflare-pages.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/publish-cloudflare-pages.yml) | Compila um projeto Node e publica em um projeto Cloudflare Pages via wrangler. Valida SemVer quando `stage: prod` e comenta a URL de preview em PRs quando `stage: preview`. |
 | 🔷 [`service-fabric-upgrade.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/service-fabric-upgrade.yml) | Upgrade monitorado **sem downtime** — o SF atualiza um Upgrade Domain (UD) por vez. Use para serviços que não podem ficar indisponíveis durante o deploy. Reverte automaticamente em caso de falha de health check. |
 | 🔷 [`service-fabric-recreate.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/service-fabric-recreate.yml) | Remove a versão atual e cria a nova do zero — **sujeito a downtime**. Use para serviços de background que toleram uma janela de indisponibilidade durante o deploy. |
 | ✅ [`validate-dotnet.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/validate-dotnet.yml) | Restaura, compila e, opcionalmente, testa uma solution .NET em PRs. |
+| ✅ [`validate-node.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/validate-node.yml) | Instala dependências, faz lint, testa e compila um projeto Node em PRs; opcionalmente publica a saída de build como artifact. |
 
 ## 4. 🐳 Convenções de Dockerfile
 
@@ -127,6 +129,8 @@ Todos os callers herdam estes valores em nível de organização — não dupliq
 | `SF_CLUSTER_SERVER_CERT_THUMBPRINT` | Variável | Service Fabric |
 | `SF_CLUSTER_CERT_PFX_BASE64` | Secret | Service Fabric |
 | `SF_CLUSTER_CERT_PASSWORD` | Secret | Service Fabric |
+| `CLOUDFLARE_API_TOKEN` | Secret | Cloudflare Pages |
+| `CLOUDFLARE_ACCOUNT_ID` | Secret | Cloudflare Pages |
 
 ## 8. 🚀 Release e rollback
 
@@ -155,6 +159,24 @@ flowchart LR
 ```
 
 StatefulSets não fazem rollback automático em `ImagePullBackOff`; o gate `rollback-approval` é o único caminho de recuperação nesses casos.
+
+### ☁️ Cloudflare Pages
+
+Disparado por tag quando `stage: prod`. O workflow valida a SemVer, compila e implanta via wrangler. O deploy é idempotente — cada release cria uma nova deployment no projeto Cloudflare Pages.
+
+Rollback é feito pelo dashboard da Cloudflare (promover uma deployment anterior) — não há gate de `rollback-approval` neste caminho, pois a API do Cloudflare Pages não expõe uma operação de rollback assistida equivalente à do ArgoCD. Alternativa: recriar a release apontando para o commit da versão anterior.
+
+Em PRs, use `stage: preview` para implantar um preview isolado e comentar a URL no PR.
+
+```mermaid
+flowchart LR
+  A[Criar release<br/>&lt;produto&gt;-&lt;tipo&gt;-v&lt;semver&gt;] --> B[Build do projeto Node]
+  B --> C[wrangler pages deploy]
+  C --> D[Cloudflare Pages<br/>nova deployment]
+  D --> E{Saudável?}
+  E -->|sim| F[✅ Sucesso]
+  E -->|não| G[Promover deployment anterior<br/>no dashboard Cloudflare]
+```
 
 ### 🔷 Service Fabric
 
@@ -218,3 +240,41 @@ Os workflows reutilizáveis `publish-nuget.yml` e `validate-dotnet.yml` injetam 
 ## ✅ Validação de PR
 
 Chame `nfe/.github/.github/workflows/validate-dotnet.yml` a partir de `.github/workflows/pr.yml`. Os testes rodam por padrão; defina `skipTests: true` apenas quando inevitável.
+
+---
+
+# Repositórios Node
+
+## 📌 Fixação de versões
+
+- **`package.json#engines.node`** — declare a versão do Node usada em runtime e passe a mesma via input `nodeVersion` nos workflows reutilizáveis.
+- **`package-lock.json`** commitado — `npm ci` (usado pelos reusables) exige lockfile.
+
+## 🏷️ Versionamento
+
+A versão flui da tag de release. Não mantenha `version` em `package.json` sincronizado manualmente — o `publish-cloudflare-pages.yml` extrai a SemVer da tag quando `stage: prod`, e aplicações publicadas como pacotes NuGet/contêiner seguem a regra geral da §1.
+
+## 📦 Pacotes privados
+
+Se o repositório consome pacotes npm privados da `nfe` (ex.: escopo `@nfeio`), adicione um `.npmrc` na raiz:
+
+```
+@nfeio:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+always-auth=true
+```
+
+Os reusables `validate-node.yml` e `publish-cloudflare-pages.yml` configuram `registry-url` e `scope` em `actions/setup-node` e injetam `NODE_AUTH_TOKEN` no `npm ci`. Ajuste `packageScope` se o escopo da org for outro (default: `@nfeio`).
+
+## ✅ Validação de PR
+
+Chame `nfe/.github/.github/workflows/validate-node.yml` a partir de `.github/workflows/pr.yml`. Lint e testes rodam por padrão; use `skipLint` / `skipTests` apenas quando não aplicável.
+
+## ☁️ Deploy para Cloudflare Pages
+
+Chame `nfe/.github/.github/workflows/publish-cloudflare-pages.yml` a partir de um `.github/workflows/publish-<produto>-<tipo>.yml` disparado por release:
+
+- `stage: prod` + `tagPrefix: <produto>-<tipo>-v` para validar SemVer extraída da tag (ex.: `account-app-v1.2.0` → `1.2.0`).
+- `stage: preview` em workflows disparados por `pull_request` para implantar previews e comentar a URL no PR.
+- `projectName` deve corresponder ao projeto existente no Cloudflare Pages (crie-o previamente no dashboard).
+- `branch` controla se a Cloudflare trata o deploy como produção (o branch de produção configurado no projeto) ou preview.
