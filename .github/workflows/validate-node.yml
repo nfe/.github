@@ -1,0 +1,99 @@
+name: Validate Node project
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: "Runner label to use (for example, ubuntu-latest or a self-hosted runner label)"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+      nodeVersion:
+        description: "Node.js version (passed to actions/setup-node)"
+        required: false
+        type: string
+        default: "20"
+      packageScope:
+        description: "npm scope used to authenticate against GitHub Packages (e.g., '@nfe', '@nfeio')"
+        required: false
+        type: string
+        default: "@nfeio"
+      skipTests:
+        description: "Skip the test step (useful for projects without tests or with infra dependencies)"
+        required: false
+        type: boolean
+        default: false
+      skipLint:
+        description: "Skip the lint step"
+        required: false
+        type: boolean
+        default: false
+      buildCommand:
+        description: "npm script used to build the project"
+        required: false
+        type: string
+        default: "npm run build"
+      lintCommand:
+        description: "npm script used to lint the project"
+        required: false
+        type: string
+        default: "npm run lint"
+      testCommand:
+        description: "npm script used to test the project"
+        required: false
+        type: string
+        default: "npm test"
+      uploadArtifact:
+        description: "Upload the build output directory as a workflow artifact"
+        required: false
+        type: boolean
+        default: false
+      buildOutputDir:
+        description: "Build output directory uploaded when uploadArtifact is true"
+        required: false
+        type: string
+        default: "dist"
+
+jobs:
+  validate:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.nodeVersion }}
+          registry-url: https://npm.pkg.github.com
+          scope: ${{ inputs.packageScope }}
+          cache: npm
+
+      - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm ci
+
+      - name: Lint
+        if: ${{ !inputs.skipLint }}
+        run: ${{ inputs.lintCommand }}
+
+      - name: Test
+        if: ${{ !inputs.skipTests }}
+        run: ${{ inputs.testCommand }}
+
+      - name: Build
+        run: ${{ inputs.buildCommand }}
+
+      - name: Upload build artifact
+        if: ${{ inputs.uploadArtifact }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: ${{ inputs.buildOutputDir }}
+          retention-days: 7

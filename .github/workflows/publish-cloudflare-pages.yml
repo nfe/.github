@@ -1,0 +1,175 @@
+name: Publish to Cloudflare Pages
+
+on:
+  workflow_call:
+    inputs:
+      projectName:
+        description: "Cloudflare Pages project name (e.g., 'shared-account-app-production')"
+        required: true
+        type: string
+      stage:
+        description: "'production' or 'preview'. When 'production', the tag must match '{tagPrefix}{semver}'. Only affects SemVer validation and the PR-comment step; the concurrency group keys on projectName+branch."
+        required: false
+        type: string
+        default: "production"
+      branch:
+        description: "Branch passed to wrangler (controls whether Cloudflare treats the deploy as production or preview)"
+        required: false
+        type: string
+        default: "main"
+      runner:
+        description: "Runner label to use"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+      nodeVersion:
+        description: "Node.js version"
+        required: false
+        type: string
+        default: "20"
+      packageScope:
+        description: "npm scope used to authenticate against GitHub Packages"
+        required: false
+        type: string
+        default: "@nfeio"
+      buildCommand:
+        description: "Command used to build the app before deploying"
+        required: false
+        type: string
+        default: "npm run build"
+      buildOutputDir:
+        description: "Directory containing the built static site (passed to wrangler pages deploy)"
+        required: false
+        type: string
+        default: "dist"
+      wranglerVersion:
+        description: "Version of wrangler to use"
+        required: false
+        type: string
+        default: "3"
+      tagPrefix:
+        description: "Release tag prefix used to extract the version when stage == 'production' (e.g., 'v' for 'v1.0.0', 'shared-account-app-v' for 'shared-account-app-v1.2.3')"
+        required: true
+        type: string
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+    outputs:
+      version:
+        description: "Extracted SemVer when stage == 'production', empty otherwise"
+        value: ${{ jobs.deploy.outputs.version }}
+      deploymentUrl:
+        description: "Deployment URL returned by wrangler"
+        value: ${{ jobs.deploy.outputs.deploymentUrl }}
+
+concurrency:
+  group: cloudflare-pages-${{ inputs.projectName }}-${{ inputs.branch }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      deploymentUrl: ${{ steps.deploy.outputs.deploymentUrl }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        if: ${{ inputs.stage == 'production' && startsWith(github.ref, 'refs/tags/') }}
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#${{ inputs.tagPrefix }}}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::Invalid version extracted from tag '$GITHUB_REF_NAME' (prefix '${{ inputs.tagPrefix }}'): '$VERSION'"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.nodeVersion }}
+          registry-url: https://npm.pkg.github.com
+          scope: ${{ inputs.packageScope }}
+          cache: npm
+
+      - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm ci
+
+      - name: Build
+        run: ${{ inputs.buildCommand }}
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=$(mktemp)
+          npx --yes wrangler@${{ inputs.wranglerVersion }} pages deploy "${{ inputs.buildOutputDir }}" \
+            --project-name="${{ inputs.projectName }}" \
+            --branch="${{ inputs.branch }}" \
+            --commit-hash="${{ github.sha }}" 2>&1 | tee "$LOG"
+          URL=$(grep -oE 'https://[a-z0-9.-]+\.pages\.dev' "$LOG" | tail -n 1 || true)
+          if [[ -n "$URL" ]]; then
+            echo "deploymentUrl=$URL" >> "$GITHUB_OUTPUT"
+            echo "## Cloudflare Pages deployment" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Project: \`${{ inputs.projectName }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Branch: \`${{ inputs.branch }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- URL: $URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Comment deployment URL on PR
+        if: ${{ inputs.stage == 'preview' && github.event_name == 'pull_request' && steps.deploy.outputs.deploymentUrl != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.deploy.outputs.deploymentUrl }}';
+            const project = '${{ inputs.projectName }}';
+            const marker = '<!-- cloudflare-pages-preview:' + project + ' -->';
+            const body = [
+              marker,
+              '### Cloudflare Pages preview',
+              '',
+              '- Project: `' + project + '`',
+              '- URL: ' + url,
+              '- Commit: `${{ github.sha }}`',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
