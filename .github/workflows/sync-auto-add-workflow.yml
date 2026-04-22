@@ -1,0 +1,153 @@
+name: Sync auto-add-to-project workflow
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (lista repos sem abrir PR)'
+        type: boolean
+        default: false
+      limit:
+        description: 'Max de repos a processar (0 = todos)'
+        type: string
+        default: '0'
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync template to all non-archived repos
+        env:
+          GH_TOKEN: ${{ secrets.WORK_PROJECT_TOKEN }}
+          TEMPLATE_PATH: templates/auto-add-to-project.yml
+          TARGET_PATH: .github/workflows/auto-add-to-project.yml
+          SYNC_BRANCH: chore/auto-add-to-project-sync
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          LIMIT: ${{ inputs.limit || '0' }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f "$TEMPLATE_PATH" ]; then
+            echo "::error::Template nao encontrado em $TEMPLATE_PATH"
+            exit 1
+          fi
+
+          TEMPLATE_CONTENT=$(cat "$TEMPLATE_PATH")
+          TEMPLATE_B64=$(base64 -w0 "$TEMPLATE_PATH")
+
+          mapfile -t repos < <(gh api 'orgs/nfe/repos?per_page=100&type=all' --paginate --jq '.[] | select(.archived == false) | .name')
+          total=${#repos[@]}
+          echo "Encontrados $total repos nao-arquivados na org nfe"
+
+          if [ "$LIMIT" != "0" ] && [ "$LIMIT" -gt 0 ] 2>/dev/null; then
+            repos=("${repos[@]:0:$LIMIT}")
+            echo "Limitando a ${#repos[@]} repos (input limit=$LIMIT)"
+          fi
+
+          opened=0; skipped=0; failed=0
+
+          for repo in "${repos[@]}"; do
+            echo "::group::$repo"
+
+            existing_sha=""
+            content_matches=false
+            if resp=$(gh api "repos/nfe/$repo/contents/$TARGET_PATH" 2>/dev/null); then
+              existing_sha=$(echo "$resp" | jq -r '.sha')
+              existing_content=$(echo "$resp" | jq -r '.content' | base64 -d 2>/dev/null || echo "")
+              if [ "$existing_content" = "$TEMPLATE_CONTENT" ]; then
+                content_matches=true
+              fi
+            fi
+
+            if [ "$content_matches" = "true" ]; then
+              echo "ja sincronizado"
+              skipped=$((skipped+1))
+              echo "::endgroup::"
+              continue
+            fi
+
+            if pr_num=$(gh pr list -R "nfe/$repo" --head "$SYNC_BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null) && [ -n "$pr_num" ]; then
+              echo "PR #$pr_num ja aberto"
+              skipped=$((skipped+1))
+              echo "::endgroup::"
+              continue
+            fi
+
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "[dry-run] abriria PR em nfe/$repo"
+              opened=$((opened+1))
+              echo "::endgroup::"
+              continue
+            fi
+
+            default_branch=$(gh api "repos/nfe/$repo" --jq '.default_branch')
+            base_sha=$(gh api "repos/nfe/$repo/git/ref/heads/$default_branch" --jq '.object.sha')
+
+            if gh api "repos/nfe/$repo/git/ref/heads/$SYNC_BRANCH" >/dev/null 2>&1; then
+              gh api -X PATCH "repos/nfe/$repo/git/refs/heads/$SYNC_BRANCH" \
+                -f sha="$base_sha" -F force=true >/dev/null
+            else
+              gh api -X POST "repos/nfe/$repo/git/refs" \
+                -f ref="refs/heads/$SYNC_BRANCH" \
+                -f sha="$base_sha" >/dev/null
+            fi
+
+            branch_sha=""
+            if resp=$(gh api "repos/nfe/$repo/contents/$TARGET_PATH?ref=$SYNC_BRANCH" 2>/dev/null); then
+              branch_sha=$(echo "$resp" | jq -r '.sha')
+            fi
+
+            commit_msg="chore: add auto-add-to-project workflow"
+            [ -n "$existing_sha" ] && commit_msg="chore: update auto-add-to-project workflow"
+
+            if [ -n "$branch_sha" ]; then
+              gh api -X PUT "repos/nfe/$repo/contents/$TARGET_PATH" \
+                -f message="$commit_msg" \
+                -f content="$TEMPLATE_B64" \
+                -f branch="$SYNC_BRANCH" \
+                -f sha="$branch_sha" >/dev/null
+            else
+              gh api -X PUT "repos/nfe/$repo/contents/$TARGET_PATH" \
+                -f message="$commit_msg" \
+                -f content="$TEMPLATE_B64" \
+                -f branch="$SYNC_BRANCH" >/dev/null
+            fi
+
+            pr_body='Sincroniza o workflow `auto-add-to-project.yml` a partir de [nfe/.github](https://github.com/nfe/.github/blob/main/templates/auto-add-to-project.yml).
+
+Ao merge, toda nova issue aberta neste repositorio sera automaticamente adicionada ao Project [Work - Product & Engineering (nfe/5)](https://github.com/orgs/nfe/projects/5).
+
+**Requisitos:**
+- Secret organization-level `WORK_PROJECT_TOKEN` (PAT com scope `project`) visivel para este repositorio
+
+---
+_PR aberto automaticamente pelo workflow `sync-auto-add-workflow` em nfe/.github._'
+
+            if pr_url=$(gh pr create -R "nfe/$repo" \
+              --base "$default_branch" \
+              --head "$SYNC_BRANCH" \
+              --title "chore: sync auto-add-to-project workflow" \
+              --body "$pr_body" 2>&1); then
+              echo "aberto: $pr_url"
+              opened=$((opened+1))
+            else
+              echo "::warning::falha ao abrir PR em $repo: $pr_url"
+              failed=$((failed+1))
+            fi
+
+            echo "::endgroup::"
+          done
+
+          echo ""
+          echo "=== Resumo ==="
+          echo "PRs abertos: $opened"
+          echo "Pulados: $skipped"
+          echo "Falhas: $failed"
+          echo "Total processados: ${#repos[@]}"

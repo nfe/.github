@@ -1,0 +1,93 @@
+name: Reconcile Project items (nfe/5)
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (nao adiciona, so reporta)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add orphan issues to Project #5
+        env:
+          GH_TOKEN: ${{ secrets.WORK_PROJECT_TOKEN }}
+          PROJECT_ID: PVT_kwDOAID6As4BUp17
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: |
+          set -euo pipefail
+
+          in_project=$(mktemp)
+          gh api graphql --paginate \
+            -f query='
+              query($projectId: ID!, $endCursor: String) {
+                node(id: $projectId) {
+                  ... on ProjectV2 {
+                    items(first: 100, after: $endCursor) {
+                      nodes { content { ... on Issue { id } } }
+                      pageInfo { endCursor hasNextPage }
+                    }
+                  }
+                }
+              }' \
+            -F projectId="$PROJECT_ID" \
+            --jq '.data.node.items.nodes[].content.id // empty' > "$in_project"
+          sort -u -o "$in_project" "$in_project"
+          echo "Issues ja no Project: $(wc -l < "$in_project")"
+
+          all_open=$(mktemp)
+          mapfile -t repos < <(gh api 'orgs/nfe/repos?per_page=100&type=all' --paginate --jq '.[] | select(.archived == false) | .name')
+          echo "Repos nao-arquivados: ${#repos[@]}"
+          for repo in "${repos[@]}"; do
+            gh api --paginate "repos/nfe/$repo/issues?state=open&per_page=100" \
+              --jq '.[] | select(.pull_request == null) | .node_id' >> "$all_open" 2>/dev/null || true
+          done
+          sort -u -o "$all_open" "$all_open"
+          echo "Issues abertas na org: $(wc -l < "$all_open")"
+
+          orphans=$(mktemp)
+          comm -23 "$all_open" "$in_project" > "$orphans" || true
+          orphan_count=$(wc -l < "$orphans")
+          echo "Orphas a adicionar: $orphan_count"
+
+          if [ "$orphan_count" -eq 0 ]; then
+            echo "Nada a fazer."
+            exit 0
+          fi
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "[dry-run] orphans:"
+            cat "$orphans"
+            exit 0
+          fi
+
+          added=0; failed=0
+          while IFS= read -r issue_id; do
+            [ -z "$issue_id" ] && continue
+            if gh api graphql \
+              -f query='
+                mutation($project: ID!, $content: ID!) {
+                  addProjectV2ItemById(input: {projectId: $project, contentId: $content}) {
+                    item { id }
+                  }
+                }' \
+              -F project="$PROJECT_ID" \
+              -F content="$issue_id" >/dev/null 2>&1; then
+              added=$((added+1))
+            else
+              failed=$((failed+1))
+              echo "::warning::falha ao adicionar $issue_id"
+            fi
+          done < "$orphans"
+
+          echo "=== Resumo ==="
+          echo "Adicionadas: $added"
+          echo "Falhas: $failed"
