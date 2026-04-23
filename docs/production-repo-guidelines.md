@@ -292,7 +292,7 @@ Chame `nfe/.github/.github/workflows/publish-npm.yml` a partir de um `.github/wo
 
 - `tagPrefix` obrigatório, seguindo o padrão de tag (ex.: `shared-ember-implicit-auth-lib-v` para tags `shared-ember-implicit-auth-lib-v3.2.2`).
 - `workingDirectory` aponta para a pasta com o `package.json` publicável — use `addon` em addons Ember, `.` em repositórios single-package.
-- `packageScope` default é `@nfeio`; ajuste se o escopo da org for outro.
+- `packageScope` default é `@nfe`; ajuste se o escopo da org for outro.
 - `installCommand` default é `npm ci`; use `npm install` apenas em repositórios sem lockfile.
 - `buildCommand` é opcional; defina quando for necessário compilar antes de publicar (ex.: `npm run --workspace addon build`).
 
