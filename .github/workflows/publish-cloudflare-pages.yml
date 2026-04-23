@@ -31,7 +31,7 @@ on:
         description: "npm scope used to authenticate against GitHub Packages"
         required: false
         type: string
-        default: "@nfeio"
+        default: "@nfe"
       buildCommand:
         description: "Command used to build the app before deploying"
         required: false

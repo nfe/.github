@@ -14,10 +14,10 @@ on:
         type: string
         default: "20"
       packageScope:
-        description: "npm scope used to authenticate against GitHub Packages (e.g., '@nfe', '@nfeio')"
+        description: "npm scope used to authenticate against GitHub Packages (e.g., '@nfe')"
         required: false
         type: string
-        default: "@nfeio"
+        default: "@nfe"
       skipTests:
         description: "Skip the test step (useful for projects without tests or with infra dependencies)"
         required: false

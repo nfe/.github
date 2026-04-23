@@ -263,15 +263,15 @@ Chame `nfe/.github/.github/workflows/validate-dotnet.yml` a partir de `.github/w
 
 ## 📦 Pacotes privados
 
-Se o repositório consome pacotes npm privados da `nfe` (ex.: escopo `@nfeio`), adicione um `.npmrc` na raiz:
+Se o repositório consome pacotes npm privados da `nfe` (ex.: escopo `@nfe`), adicione um `.npmrc` na raiz:
 
 ```
-@nfeio:registry=https://npm.pkg.github.com
+@nfe:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
 always-auth=true
 ```
 
-Os reusables `validate-node.yml` e `publish-cloudflare-pages.yml` configuram `registry-url` e `scope` em `actions/setup-node` e injetam `NODE_AUTH_TOKEN` no `npm ci`. Ajuste `packageScope` se o escopo da org for outro (default: `@nfeio`).
+Os reusables `validate-node.yml` e `publish-cloudflare-pages.yml` configuram `registry-url` e `scope` em `actions/setup-node` e injetam `NODE_AUTH_TOKEN` no `npm ci`. Ajuste `packageScope` se o escopo da org for outro (default: `@nfe`).
 
 ## ✅ Validação de PR
 
