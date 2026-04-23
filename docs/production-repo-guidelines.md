@@ -1,6 +1,6 @@
 # 📘 Guia para repositórios de produção
 
-Aplica-se a qualquer repositório da organização `nfe` cujos artefatos vão para produção — contêineres implantados via ArgoCD, pacotes NuGet publicados no GitHub Packages ou aplicações Service Fabric. Adote estas convenções ao criar um novo repositório de produção ou ao migrar um existente.
+Aplica-se a qualquer repositório da organização `nfe` cujos artefatos vão para produção — contêineres implantados via ArgoCD, pacotes NuGet ou npm publicados no GitHub Packages, sites no Cloudflare Pages ou aplicações Service Fabric. Adote estas convenções ao criar um novo repositório de produção ou ao migrar um existente.
 
 ---
 
@@ -30,6 +30,7 @@ Todos os workflows reutilizáveis compartilhados ficam em `nfe/.github/.github/w
 | 🐳 [`build-and-push-container.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/build-and-push-container.yml) | Constrói uma imagem de contêiner e faz push para o GHCR; expõe a versão extraída para jobs subsequentes. |
 | 🚀 [`publish-container-argocd.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/publish-container-argocd.yml) | Faz upsert da aplicação ArgoCD com uma tag de imagem específica, aguarda sync saudável e controla o rollback via o environment `rollback-approval`. |
 | 📦 [`publish-nuget.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/publish-nuget.yml) | Compila, empacota e publica um projeto .NET no GitHub Packages; anexa o `.nupkg` à release. |
+| 📦 [`publish-npm.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/publish-npm.yml) | Alinha a versão do `package.json` com a tag de release e publica um pacote npm no GitHub Packages. Suporta monorepos via `workingDirectory`. |
 | ☁️ [`publish-cloudflare-pages.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/publish-cloudflare-pages.yml) | Compila um projeto Node e publica em um projeto Cloudflare Pages via wrangler. Valida SemVer quando `stage: production` e comenta a URL de preview em PRs quando `stage: preview`. |
 | 🔷 [`service-fabric-upgrade.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/service-fabric-upgrade.yml) | Upgrade monitorado **sem downtime** — o SF atualiza um Upgrade Domain (UD) por vez. Use para serviços que não podem ficar indisponíveis durante o deploy. Reverte automaticamente em caso de falha de health check. |
 | 🔷 [`service-fabric-recreate.yml`](https://github.com/nfe/.github/blob/main/.github/workflows/service-fabric-recreate.yml) | Remove a versão atual e cria a nova do zero — **sujeito a downtime**. Use para serviços de background que toleram uma janela de indisponibilidade durante o deploy. |
@@ -144,6 +145,16 @@ flowchart LR
   B --> C[Push para<br/>GitHub Packages]
 ```
 
+### 📦 npm
+
+Disparado por release. O workflow alinha o `package.json` à tag e publica no GitHub Packages. Pacotes são imutáveis — não há rollback; corrija com uma nova versão patch.
+
+```mermaid
+flowchart LR
+  A[Criar release<br/>&lt;produto&gt;-&lt;tipo&gt;-v&lt;semver&gt;] --> B[npm version<br/>alinha package.json]
+  B --> C[npm publish para<br/>GitHub Packages]
+```
+
 ### 🐳 ArgoCD (contêiner + Kubernetes)
 
 ```mermaid
@@ -248,7 +259,7 @@ Chame `nfe/.github/.github/workflows/validate-dotnet.yml` a partir de `.github/w
 ## 📌 Fixação de versões
 
 - **`package.json#engines.node`** — declare a versão do Node usada em runtime e passe a mesma via input `nodeVersion` nos workflows reutilizáveis.
-- **`package-lock.json`** commitado — `npm ci` (usado pelos reusables) exige lockfile.
+- **`package-lock.json`** commitado — `npm ci` (default nos reusables) exige lockfile. Em repositórios sem lockfile (ex.: addons Ember com `npm install` histórico), sobrescreva `installCommand: "npm install"` no caller.
 
 ## 📦 Pacotes privados
 
@@ -274,3 +285,15 @@ Chame `nfe/.github/.github/workflows/publish-cloudflare-pages.yml` a partir de u
 - `stage: preview` em workflows disparados por `pull_request` para implantar previews e comentar a URL no PR.
 - `projectName` deve corresponder ao projeto existente no Cloudflare Pages (crie-o previamente no dashboard).
 - `branch` controla se a Cloudflare trata o deploy como produção (o branch de produção configurado no projeto) ou preview.
+
+## 📦 Publicação no GitHub Packages (npm)
+
+Chame `nfe/.github/.github/workflows/publish-npm.yml` a partir de um `.github/workflows/publish-<produto>-<tipo>.yml` disparado por `release: [published]`:
+
+- `tagPrefix` obrigatório, seguindo o padrão de tag (ex.: `shared-ember-implicit-auth-lib-v` para tags `shared-ember-implicit-auth-lib-v3.2.2`).
+- `workingDirectory` aponta para a pasta com o `package.json` publicável — use `addon` em addons Ember, `.` em repositórios single-package.
+- `packageScope` default é `@nfeio`; ajuste se o escopo da org for outro.
+- `installCommand` default é `npm ci`; use `npm install` apenas em repositórios sem lockfile.
+- `buildCommand` é opcional; defina quando for necessário compilar antes de publicar (ex.: `npm run --workspace addon build`).
+
+O workflow extrai a SemVer da tag, roda `npm version` para alinhar o `package.json` e executa `npm publish` no registry `https://npm.pkg.github.com` autenticado via `GITHUB_TOKEN`. Não há rollback — pacotes publicados são imutáveis; corrija com uma nova versão patch.
