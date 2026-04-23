@@ -55,6 +55,16 @@ on:
         description: "Cloudflare account ID (not sensitive — a public identifier; pass vars.CLOUDFLARE_ACCOUNT_ID)"
         required: true
         type: string
+      installCommand:
+        description: "Command used to install dependencies. Use 'npm install' for repos without a lockfile; 'npm ci' otherwise."
+        required: false
+        type: string
+        default: "npm ci"
+      cacheDependencies:
+        description: "Enable actions/setup-node npm cache. Requires a lockfile. Set to false when the repo has no lockfile."
+        required: false
+        type: boolean
+        default: true
     secrets:
       CLOUDFLARE_API_TOKEN:
         required: true
@@ -98,7 +108,8 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Setup Node.js
+      - name: Setup Node.js (with cache)
+        if: ${{ inputs.cacheDependencies }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.nodeVersion }}
@@ -106,10 +117,18 @@ jobs:
           scope: ${{ inputs.packageScope }}
           cache: npm
 
+      - name: Setup Node.js (no cache)
+        if: ${{ !inputs.cacheDependencies }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.nodeVersion }}
+          registry-url: https://npm.pkg.github.com
+          scope: ${{ inputs.packageScope }}
+
       - name: Install dependencies
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm ci
+        run: ${{ inputs.installCommand }}
 
       - name: Build
         run: ${{ inputs.buildCommand }}
