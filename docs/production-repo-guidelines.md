@@ -131,7 +131,7 @@ Todos os callers herdam estes valores em nível de organização — não dupliq
 | `SF_CLUSTER_CERT_PFX_BASE64` | Secret | Service Fabric |
 | `SF_CLUSTER_CERT_PASSWORD` | Secret | Service Fabric |
 | `CLOUDFLARE_API_TOKEN` | Secret | Cloudflare Pages |
-| `CLOUDFLARE_ACCOUNT_ID` | Secret | Cloudflare Pages |
+| `CLOUDFLARE_ACCOUNT_ID` | Variável | Cloudflare Pages (public identifier, not sensitive) |
 
 ## 8. 🚀 Release e rollback
 

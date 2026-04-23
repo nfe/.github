@@ -51,10 +51,12 @@ on:
         description: "Release tag prefix used to extract the version when stage == 'production' (e.g., 'v' for 'v1.0.0', 'shared-account-app-v' for 'shared-account-app-v1.2.3')"
         required: true
         type: string
+      cloudflareAccountId:
+        description: "Cloudflare account ID (not sensitive — a public identifier; pass vars.CLOUDFLARE_ACCOUNT_ID)"
+        required: true
+        type: string
     secrets:
       CLOUDFLARE_API_TOKEN:
-        required: true
-      CLOUDFLARE_ACCOUNT_ID:
         required: true
     outputs:
       version:
@@ -116,7 +118,7 @@ jobs:
         id: deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflareAccountId }}
         shell: bash
         run: |
           set -euo pipefail
