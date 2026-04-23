@@ -1,0 +1,118 @@
+name: Publish npm package
+
+on:
+  workflow_call:
+    inputs:
+      workingDirectory:
+        description: "Directory containing the package.json to publish (e.g., 'addon' for workspace layouts, '.' for single-package repos)"
+        required: false
+        type: string
+        default: "."
+      installWorkingDirectory:
+        description: "Directory to run install/build from. Defaults to the repo root so workspace installs hydrate every package. Override for single-package-in-subfolder layouts."
+        required: false
+        type: string
+        default: "."
+      tagPrefix:
+        description: "Release tag prefix used to extract the version (e.g., 'v' for 'v1.0.0', 'addon-v' for 'addon-v1.2.3')"
+        required: true
+        type: string
+      runner:
+        description: "Runner label to use"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+      nodeVersion:
+        description: "Node.js version (passed to actions/setup-node)"
+        required: false
+        type: string
+        default: "20"
+      packageScope:
+        description: "npm scope used to authenticate against GitHub Packages (e.g., '@nfe')"
+        required: false
+        type: string
+        default: "@nfe"
+      installCommand:
+        description: "Command used to install dependencies. Use 'npm install' for repos without a lockfile; 'npm ci' otherwise."
+        required: false
+        type: string
+        default: "npm ci"
+      cacheDependencies:
+        description: "Enable actions/setup-node npm cache. Requires a lockfile at cacheDependencyPath. Set to false when the repo has no lockfile."
+        required: false
+        type: boolean
+        default: true
+      cacheDependencyPath:
+        description: "Path glob passed to actions/setup-node cache-dependency-path. Adjust when the lockfile lives outside the repo root."
+        required: false
+        type: string
+        default: "package-lock.json"
+      buildCommand:
+        description: "Optional command run before publishing (e.g., 'npm run --workspace addon build'). Leave empty to skip."
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  publish:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#${{ inputs.tagPrefix }}}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::Invalid version extracted from tag '$GITHUB_REF_NAME' (prefix '${{ inputs.tagPrefix }}'): '$VERSION'"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js (with cache)
+        if: ${{ inputs.cacheDependencies }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.nodeVersion }}
+          registry-url: https://npm.pkg.github.com
+          scope: ${{ inputs.packageScope }}
+          cache: npm
+          cache-dependency-path: ${{ inputs.cacheDependencyPath }}
+
+      - name: Setup Node.js (no cache)
+        if: ${{ !inputs.cacheDependencies }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.nodeVersion }}
+          registry-url: https://npm.pkg.github.com
+          scope: ${{ inputs.packageScope }}
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.installWorkingDirectory }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ${{ inputs.installCommand }}
+
+      - name: Align package version with release tag
+        working-directory: ${{ inputs.workingDirectory }}
+        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Build
+        if: ${{ inputs.buildCommand != '' }}
+        working-directory: ${{ inputs.installWorkingDirectory }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ${{ inputs.buildCommand }}
+
+      - name: Publish to GitHub Packages
+        working-directory: ${{ inputs.workingDirectory }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish
