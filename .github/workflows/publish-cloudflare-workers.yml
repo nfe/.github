@@ -41,10 +41,6 @@ on:
         description: "Release tag prefix used to extract the version when stage == 'production' (e.g., 'v' for 'v1.0.0', 'batch-app-v' for 'batch-app-v1.2.3')"
         required: true
         type: string
-      cloudflareAccountId:
-        description: "Cloudflare account ID (not sensitive — a public identifier; pass vars.CLOUDFLARE_ACCOUNT_ID)"
-        required: true
-        type: string
       installCommand:
         description: "Command used to install dependencies. Use 'npm install' for repos without a lockfile; 'npm ci' otherwise."
         required: false
@@ -127,7 +123,7 @@ jobs:
         id: deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflareAccountId }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         shell: bash
         run: |
           set -euo pipefail
