@@ -1,22 +1,17 @@
-name: Publish to Cloudflare Pages
+name: Publish to Cloudflare Workers
 
 on:
   workflow_call:
     inputs:
-      projectName:
-        description: "Cloudflare Pages project name (e.g., 'shared-account-app-production')"
+      workerName:
+        description: "Cloudflare Worker name — passed as 'wrangler deploy --name <workerName>' (e.g., 'batch-app-prod'). Overrides whatever is in wrangler.json / wrangler.toml."
         required: true
         type: string
       stage:
-        description: "'production' or 'preview'. When 'production', the tag must match '{tagPrefix}{semver}'. Only affects SemVer validation and the PR-comment step; the concurrency group keys on projectName+branch."
+        description: "'production' or 'preview'. When 'production', the tag must match '{tagPrefix}{semver}'. Only affects SemVer validation and the PR-comment step; the concurrency group keys on workerName+stage."
         required: false
         type: string
         default: "production"
-      branch:
-        description: "Branch passed to wrangler (controls whether Cloudflare treats the deploy as production or preview)"
-        required: false
-        type: string
-        default: "main"
       runner:
         description: "Runner label to use"
         required: false
@@ -33,22 +28,17 @@ on:
         type: string
         default: "@nfe"
       buildCommand:
-        description: "Command used to build the app before deploying"
+        description: "Command used to build the app before deploying (usually emits static assets under the directory referenced by wrangler.json's 'assets.directory')"
         required: false
         type: string
         default: "npm run build"
-      buildOutputDir:
-        description: "Directory containing the built static site (passed to wrangler pages deploy)"
-        required: false
-        type: string
-        default: "dist"
       wranglerVersion:
         description: "Version of wrangler to use"
         required: false
         type: string
         default: "3"
       tagPrefix:
-        description: "Release tag prefix used to extract the version when stage == 'production' (e.g., 'v' for 'v1.0.0', 'shared-account-app-v' for 'shared-account-app-v1.2.3')"
+        description: "Release tag prefix used to extract the version when stage == 'production' (e.g., 'v' for 'v1.0.0', 'batch-app-v' for 'batch-app-v1.2.3')"
         required: true
         type: string
       installCommand:
@@ -57,7 +47,7 @@ on:
         type: string
         default: "npm ci"
       cacheDependencies:
-        description: "Enable actions/setup-node npm cache. Requires a lockfile. Set to false when the repo has no lockfile."
+        description: "Enable actions/setup-node npm cache. Requires a lockfile. Set to false when the repo has no lockfile (or uses a non-npm lockfile like pnpm)."
         required: false
         type: boolean
         default: true
@@ -69,11 +59,11 @@ on:
         description: "Extracted SemVer when stage == 'production', empty otherwise"
         value: ${{ jobs.deploy.outputs.version }}
       deploymentUrl:
-        description: "Deployment URL returned by wrangler"
+        description: "workers.dev URL returned by wrangler"
         value: ${{ jobs.deploy.outputs.deploymentUrl }}
 
 concurrency:
-  group: cloudflare-pages-${{ inputs.projectName }}-${{ inputs.branch }}
+  group: cloudflare-workers-${{ inputs.workerName }}-${{ inputs.stage }}
   cancel-in-progress: false
 
 jobs:
@@ -129,7 +119,7 @@ jobs:
       - name: Build
         run: ${{ inputs.buildCommand }}
 
-      - name: Deploy to Cloudflare Pages
+      - name: Deploy Worker
         id: deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -138,17 +128,15 @@ jobs:
         run: |
           set -euo pipefail
           LOG=$(mktemp)
-          npx --yes wrangler@${{ inputs.wranglerVersion }} pages deploy "${{ inputs.buildOutputDir }}" \
-            --project-name="${{ inputs.projectName }}" \
-            --branch="${{ inputs.branch }}" \
-            --commit-hash="${{ github.sha }}" 2>&1 | tee "$LOG"
-          URL=$(grep -oE 'https://[a-z0-9.-]+\.pages\.dev' "$LOG" | tail -n 1 || true)
+          npx --yes wrangler@${{ inputs.wranglerVersion }} deploy \
+            --name="${{ inputs.workerName }}" 2>&1 | tee "$LOG"
+          URL=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' "$LOG" | tail -n 1 || true)
           if [[ -n "$URL" ]]; then
             echo "deploymentUrl=$URL" >> "$GITHUB_OUTPUT"
-            echo "## Cloudflare Pages deployment" >> "$GITHUB_STEP_SUMMARY"
+            echo "## Cloudflare Worker deployment" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "- Project: \`${{ inputs.projectName }}\`" >> "$GITHUB_STEP_SUMMARY"
-            echo "- Branch: \`${{ inputs.branch }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Worker: \`${{ inputs.workerName }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Stage: \`${{ inputs.stage }}\`" >> "$GITHUB_STEP_SUMMARY"
             echo "- URL: $URL" >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -158,13 +146,13 @@ jobs:
         with:
           script: |
             const url = '${{ steps.deploy.outputs.deploymentUrl }}';
-            const project = '${{ inputs.projectName }}';
-            const marker = '<!-- cloudflare-pages-preview:' + project + ' -->';
+            const worker = '${{ inputs.workerName }}';
+            const marker = '<!-- cloudflare-worker-preview:' + worker + ' -->';
             const body = [
               marker,
-              '### Cloudflare Pages preview',
+              '### Cloudflare Worker preview',
               '',
-              '- Project: `' + project + '`',
+              '- Worker: `' + worker + '`',
               '- URL: ' + url,
               '- Commit: `${{ github.sha }}`',
             ].join('\n');
