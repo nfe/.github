@@ -39,6 +39,11 @@ on:
         required: false
         type: string
         default: ""
+      extraHelmSet:
+        description: "Additional `--helm-set` arguments, one `KEY=VALUE` per line. Appended after the default image.repository/image.tag helm-set."
+        required: false
+        type: string
+        default: ""
     secrets:
       ARGOCD_AUTH_TOKEN:
         required: true
@@ -62,9 +67,25 @@ jobs:
           argocd version --client
 
       - name: Upsert ArgoCD application
+        shell: bash
         env:
           REVISION: ${{ inputs.revision != '' && inputs.revision || github.sha }}
         run: |
+          EXTRA_HELM_SET=$(cat <<'HELM_SET_EOF'
+          ${{ inputs.extraHelmSet }}
+          HELM_SET_EOF
+          )
+
+          extra_args=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            if [[ ! "$line" =~ ^[^=]+=.+ ]]; then
+              echo "::error::extraHelmSet line does not match 'KEY=VALUE': $line"
+              exit 1
+            fi
+            extra_args+=(--helm-set "$line")
+          done <<< "$EXTRA_HELM_SET"
+
           argocd app create "${{ inputs.appName }}" \
             --auth-token "${{ secrets.ARGOCD_AUTH_TOKEN }}" \
             --server "${{ vars.ARGOCD_SERVER_URL }}" \
@@ -78,6 +99,7 @@ jobs:
             --revision "${REVISION}" \
             --helm-set image.repository=${{ inputs.image }} \
             --helm-set image.tag=${{ inputs.version }} \
+            "${extra_args[@]}" \
             --sync-policy automated \
             --sync-option Prune=true \
             --sync-option SelfHeal=true \

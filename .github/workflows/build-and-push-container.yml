@@ -22,6 +22,16 @@ on:
         required: false
         type: string
         default: "."
+      dockerfileTarget:
+        description: "Target stage in a multi-stage Dockerfile (passed to docker/build-push-action `target`). Empty = no target."
+        required: false
+        type: string
+        default: ""
+      buildArgs:
+        description: "Extra build args for docker build, one `KEY=VALUE` per line (passed as `build-args`). Empty = none."
+        required: false
+        type: string
+        default: ""
     outputs:
       version:
         description: "Extracted SemVer (no prefix)"
@@ -72,10 +82,12 @@ jobs:
         with:
           context: ${{ inputs.dockerContext }}
           file: ${{ inputs.dockerfile }}
+          target: ${{ inputs.dockerfileTarget }}
           push: true
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
             GITHUB_USERNAME=${{ github.actor }}
+            ${{ inputs.buildArgs }}
           secrets: |
             github_packages_token=${{ secrets.GITHUB_TOKEN }}
           tags: |
