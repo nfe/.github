@@ -76,10 +76,14 @@ jobs:
           HELM_SET_EOF
           )
 
-          EXTRA_ARGS=""
+          extra_args=()
           while IFS= read -r line; do
             [ -z "$line" ] && continue
-            EXTRA_ARGS="$EXTRA_ARGS --helm-set $line"
+            if [[ ! "$line" =~ ^[^=]+=.+ ]]; then
+              echo "::error::extraHelmSet line does not match 'KEY=VALUE': $line"
+              exit 1
+            fi
+            extra_args+=(--helm-set "$line")
           done <<< "$EXTRA_HELM_SET"
 
           argocd app create "${{ inputs.appName }}" \
@@ -95,7 +99,7 @@ jobs:
             --revision "${REVISION}" \
             --helm-set image.repository=${{ inputs.image }} \
             --helm-set image.tag=${{ inputs.version }} \
-            $EXTRA_ARGS \
+            "${extra_args[@]}" \
             --sync-policy automated \
             --sync-option Prune=true \
             --sync-option SelfHeal=true \
