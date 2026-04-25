@@ -219,7 +219,7 @@ jobs:
         shell: pwsh
         env:
           APP_VERSION: ${{ needs.build.outputs.version }}
-        run: Expand-Archive -Path "sfapp-$env:APP_VERSION.zip" -DestinationPath "sfapp"
+        run: Expand-Archive -Path "sfapp-$env:APP_VERSION.zip" -DestinationPath "sfapp" -Force
 
       - name: Install cluster certificate and prepare connect helper
         shell: pwsh
