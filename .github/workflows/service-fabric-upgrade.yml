@@ -108,12 +108,6 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Configure MSBuildSDKsPath
-        uses: nfe/.github/.github/actions/configure-msbuild-sdks-path@main
-
       - name: Stamp version in manifests
         shell: pwsh
         env:
@@ -139,14 +133,14 @@ jobs:
             $sm.Save($_.FullName)
           }
 
-      - name: Restore + Build (msbuild)
+      - name: Restore + Build (dotnet msbuild)
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: msbuild "${{ inputs.solution }}" -t:"Restore;Build" -p:RestorePackagesConfig=true -p:Configuration=Release /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
+        run: dotnet msbuild "${{ inputs.solution }}" -t:"Restore;Build" -p:RestorePackagesConfig=true -p:Configuration=Release /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
 
       - name: Package Service Fabric application
-        run: msbuild "${{ inputs.sfproj }}" -t:Package -p:Configuration=Release -p:Platform=x64
+        run: dotnet msbuild "${{ inputs.sfproj }}" -t:Package -p:Configuration=Release -p:Platform=x64
 
       - name: Stage artifact
         shell: pwsh
