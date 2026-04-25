@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       runner:
-        description: "Runner label to use. When empty (default), routes to vars.RUNNER_LINUX. Override with vars.RUNNER_WINDOWS for projects that depend on Windows-only MSBuild SDKs (e.g., Microsoft.VisualStudio.Azure.Fabric.MSBuild)."
+        description: "Runner label. Empty defaults to vars.RUNNER_LINUX."
         required: false
         type: string
         default: ""
