@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       runner:
-        description: "Runner label. Empty defaults to vars.RUNNER_LINUX."
+        description: "Runner labels (JSON-array formatted string). Empty defaults to vars.RUNNER_LINUX."
         required: false
         type: string
         default: ""
@@ -20,7 +20,7 @@ on:
 
 jobs:
   validate:
-    runs-on: ${{ inputs.runner != '' && inputs.runner || vars.RUNNER_LINUX }}
+    runs-on: ${{ fromJSON(inputs.runner != '' && inputs.runner || vars.RUNNER_LINUX) }}
     timeout-minutes: 15
     permissions:
       contents: read

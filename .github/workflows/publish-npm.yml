@@ -50,7 +50,7 @@ on:
 
 jobs:
   publish:
-    runs-on: ${{ vars.RUNNER_LINUX }}
+    runs-on: ${{ fromJSON(vars.RUNNER_LINUX) }}
     timeout-minutes: 15
     permissions:
       contents: read
