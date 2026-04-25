@@ -108,27 +108,41 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
+      - name: Detect packages.config
+        id: pkgcfg
+        shell: pwsh
+        run: |
+          $found = (Get-ChildItem -Recurse -File -Filter packages.config | Select-Object -First 1) -ne $null
+          "found=$($found.ToString().ToLower())" | Out-File -Append $env:GITHUB_OUTPUT
 
       - name: Setup NuGet
+        if: steps.pkgcfg.outputs.found == 'true'
         uses: NuGet/setup-nuget@v2
 
-      # Two restores by design: dotnet handles PackageReference projects
-      # (writes obj/project.assets.json), nuget handles packages.config
-      # consumers (populates the legacy <repo>/packages folder that
-      # .sfproj's relative imports rely on).
+      # dotnet restore handles PackageReference (writes obj/project.assets.json).
+      # nuget restore is invoked per packages.config — passing the sln
+      # would make nuget drive VS Build Tools' MSBuild over the SDK-style
+      # projects too, which can't resolve Microsoft.NET.Sdk*. Targeting
+      # individual packages.config files avoids that path entirely while
+      # still populating <repo>/packages for .sfproj relative imports.
       - name: Restore (dotnet)
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: dotnet restore "${{ inputs.solution }}"
 
-      - name: Restore (nuget)
+      - name: Restore (nuget, per packages.config)
+        if: steps.pkgcfg.outputs.found == 'true'
+        shell: pwsh
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: nuget restore "${{ inputs.solution }}"
+        run: |
+          $pkgDir = Join-Path $env:GITHUB_WORKSPACE 'packages'
+          Get-ChildItem -Recurse -File -Filter packages.config | ForEach-Object {
+            nuget restore $_.FullName -PackagesDirectory $pkgDir
+            if ($LASTEXITCODE -ne 0) { throw "nuget restore failed for $($_.FullName)" }
+          }
 
       - name: Stamp version in manifests
         shell: pwsh
