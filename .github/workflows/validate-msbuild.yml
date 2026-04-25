@@ -42,7 +42,7 @@ jobs:
         shell: pwsh
         run: |
           $found = (Test-Path .nvmrc).ToString().ToLower()
-          "found=$found" | Out-File -Append $env:GITHUB_OUTPUT
+          "found=$found" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Setup Node.js
         if: steps.nvmrc.outputs.found == 'true'
