@@ -35,30 +35,6 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Hybrid SF solutions need both: nuget restore (packages.config) +
-      # dotnet restore (SDK-style PackageReference). Detect .sfproj to gate
-      # the nuget step.
-      - name: Detect sfproj in solution
-        id: detect
-        shell: bash
-        run: |
-          if grep -q '\.sfproj' "${{ inputs.solution }}" 2>/dev/null; then
-            echo "has_sfproj=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_sfproj=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Setup NuGet CLI
-        if: steps.detect.outputs.has_sfproj == 'true'
-        uses: NuGet/setup-nuget@v2
-
-      - name: Restore (nuget CLI)
-        if: steps.detect.outputs.has_sfproj == 'true'
-        env:
-          GITHUB_USERNAME: ${{ github.actor }}
-          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: nuget restore "${{ inputs.solution }}"
-
       - name: Restore (dotnet)
         env:
           GITHUB_USERNAME: ${{ github.actor }}

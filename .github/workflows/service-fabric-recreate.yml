@@ -96,9 +96,6 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Setup NuGet CLI
-        uses: NuGet/setup-nuget@v2
-
       - name: Stamp version in manifests
         shell: pwsh
         env:
@@ -124,21 +121,11 @@ jobs:
             $sm.Save($_.FullName)
           }
 
-      # nuget restore for packages.config / sfproj, dotnet restore for SDK-style.
-      - name: Restore (nuget CLI)
+      - name: Restore + Build (msbuild)
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: nuget restore "${{ inputs.solution }}"
-
-      - name: Restore (dotnet)
-        env:
-          GITHUB_USERNAME: ${{ github.actor }}
-          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: dotnet restore "${{ inputs.solution }}"
-
-      - name: Build solution
-        run: dotnet build "${{ inputs.solution }}" -c Release --no-restore /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
+        run: msbuild "${{ inputs.solution }}" -t:Restore;Build -p:RestorePackagesConfig=true -p:Configuration=Release /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
 
       - name: Package Service Fabric application
         run: msbuild "${{ inputs.sfproj }}" -t:Package -p:Configuration=Release -p:Platform=x64

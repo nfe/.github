@@ -1,0 +1,59 @@
+# Validate hybrid .NET solutions on Windows.
+# Use this reusable for solutions that include any of:
+#   - Service Fabric projects (.sfproj)
+#   - .NET Framework class libraries
+#   - PFX-signed assemblies (Dynamics plugins, strong-name signing)
+#   - packages.config restore alongside PackageReference
+# For pure SDK-style PackageReference solutions, prefer validate-dotnet.
+name: Validate hybrid .NET solution (MSBuild)
+
+on:
+  workflow_call:
+    inputs:
+      solution:
+        description: "Path to the .sln (or .csproj) file to build and test"
+        required: true
+        type: string
+      runner:
+        description: "Runner labels (JSON-array formatted string). Empty defaults to vars.RUNNER_WINDOWS."
+        required: false
+        type: string
+        default: ""
+      skipTests:
+        description: "Skip the dotnet test step (useful for projects without tests or with Windows-only / SF dependencies)"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  validate:
+    runs-on: ${{ fromJSON(inputs.runner != '' && inputs.runner || vars.RUNNER_WINDOWS) }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Needed because MSBuild's NuGetSdkResolver looks for the .NET SDK to
+      # resolve Microsoft.NET.Sdk* on SDK-style projects. setup-dotnet ensures
+      # the SDK is on the runner even if it isn't pre-installed.
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore + Build (msbuild)
+        env:
+          GITHUB_USERNAME: ${{ github.actor }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: msbuild "${{ inputs.solution }}" -t:Restore;Build -p:RestorePackagesConfig=true -p:Configuration=Release
+
+      - name: Test
+        if: ${{ !inputs.skipTests }}
+        run: dotnet test "${{ inputs.solution }}" --no-build -c Release --logger "console;verbosity=minimal"
