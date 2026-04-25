@@ -108,6 +108,18 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      # nuget.exe restore handles packages.config (legacy <repo>/packages
+      # folder layout) — needed because the dotnet/MSBuild restore writes
+      # only to the global cache and breaks .sfproj's relative imports.
+      - name: Restore (nuget)
+        env:
+          GITHUB_USERNAME: ${{ github.actor }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: nuget restore "${{ inputs.solution }}"
+
       - name: Stamp version in manifests
         shell: pwsh
         env:
@@ -133,11 +145,8 @@ jobs:
             $sm.Save($_.FullName)
           }
 
-      - name: Restore + Build (dotnet msbuild)
-        env:
-          GITHUB_USERNAME: ${{ github.actor }}
-          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: dotnet msbuild "${{ inputs.solution }}" -t:"Restore;Build" -p:RestorePackagesConfig=true -p:Configuration=Release /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
+      - name: Build (dotnet msbuild)
+        run: dotnet msbuild "${{ inputs.solution }}" -t:Build -p:Configuration=Release /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
 
       - name: Package Service Fabric application
         run: dotnet msbuild "${{ inputs.sfproj }}" -t:Package -p:Configuration=Release -p:Platform=x64

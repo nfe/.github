@@ -37,11 +37,20 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Restore + Build (dotnet msbuild)
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      # nuget.exe restore handles packages.config (legacy <repo>/packages
+      # folder layout) — needed because the dotnet/MSBuild restore writes
+      # only to the global cache and breaks .sfproj's relative imports.
+      - name: Restore (nuget)
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: dotnet msbuild "${{ inputs.solution }}" -t:"Restore;Build" -p:RestorePackagesConfig=true -p:Configuration=Release
+        run: nuget restore "${{ inputs.solution }}"
+
+      - name: Build (dotnet msbuild)
+        run: dotnet msbuild "${{ inputs.solution }}" -t:Build -p:Configuration=Release
 
       - name: Test
         if: ${{ !inputs.skipTests }}
