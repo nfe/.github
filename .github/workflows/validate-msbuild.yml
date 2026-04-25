@@ -37,14 +37,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Needed because MSBuild's NuGetSdkResolver looks for the .NET SDK to
-      # resolve Microsoft.NET.Sdk* on SDK-style projects. setup-dotnet ensures
-      # the SDK is on the runner even if it isn't pre-installed.
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: global.json
-
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
