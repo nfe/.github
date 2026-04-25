@@ -3,11 +3,6 @@ name: Validate Node project
 on:
   workflow_call:
     inputs:
-      runner:
-        description: "Runner label to use (for example, ubuntu-latest or a self-hosted runner label)"
-        required: false
-        type: string
-        default: "ubuntu-latest"
       nodeVersion:
         description: "Node.js version (passed to actions/setup-node)"
         required: false
@@ -71,7 +66,7 @@ on:
 
 jobs:
   validate:
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ vars.RUNNER_LINUX }}
     timeout-minutes: 20
     permissions:
       contents: read

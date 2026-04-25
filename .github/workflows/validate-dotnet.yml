@@ -8,10 +8,10 @@ on:
         required: true
         type: string
       runner:
-        description: "Runner label to use (for example, ubuntu-latest, windows-latest, or a self-hosted runner label)"
+        description: "Runner label. Empty defaults to vars.RUNNER_LINUX."
         required: false
         type: string
-        default: "ubuntu-latest"
+        default: ""
       skipTests:
         description: "Skip the dotnet test step (useful for projects without tests or with Windows-only / SF dependencies)"
         required: false
@@ -20,7 +20,7 @@ on:
 
 jobs:
   validate:
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner != '' && inputs.runner || vars.RUNNER_LINUX }}
     timeout-minutes: 15
     permissions:
       contents: read
