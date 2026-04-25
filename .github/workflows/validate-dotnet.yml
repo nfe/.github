@@ -7,11 +7,11 @@ on:
         description: "Path to the .sln (or .csproj) file to build and test"
         required: true
         type: string
-      os:
-        description: "Which self-hosted runner to use: 'linux' (default) or 'windows' (for projects with Windows-only MSBuild SDKs like Microsoft.VisualStudio.Azure.Fabric.MSBuild)."
+      runner:
+        description: "Runner label to use. When empty (default), routes to vars.RUNNER_LINUX. Override with vars.RUNNER_WINDOWS for projects that depend on Windows-only MSBuild SDKs (e.g., Microsoft.VisualStudio.Azure.Fabric.MSBuild)."
         required: false
         type: string
-        default: "linux"
+        default: ""
       skipTests:
         description: "Skip the dotnet test step (useful for projects without tests or with Windows-only / SF dependencies)"
         required: false
@@ -20,19 +20,13 @@ on:
 
 jobs:
   validate:
-    runs-on: ${{ inputs.os == 'windows' && vars.RUNNER_WINDOWS || vars.RUNNER_LINUX }}
+    runs-on: ${{ inputs.runner != '' && inputs.runner || vars.RUNNER_LINUX }}
     timeout-minutes: 15
     permissions:
       contents: read
       packages: read
 
     steps:
-      - name: Validate os input
-        if: ${{ inputs.os != 'linux' && inputs.os != 'windows' }}
-        run: |
-          echo "::error::Invalid 'os' input '${{ inputs.os }}' — must be 'linux' or 'windows'."
-          exit 1
-
       - name: Checkout
         uses: actions/checkout@v4
 
