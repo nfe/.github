@@ -59,8 +59,11 @@ jobs:
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: nuget restore "${{ inputs.solution }}"
 
+      # SignAssembly=false bypasses the .NET Core MSBuild guard that
+      # rejects PFX signing. PR validation only needs to compile-check;
+      # the signed artifact is produced by the dedicated release workflow.
       - name: Build (dotnet msbuild)
-        run: dotnet msbuild "${{ inputs.solution }}" -t:Build -p:Configuration=Release
+        run: dotnet msbuild "${{ inputs.solution }}" -t:Build -p:Configuration=Release -p:SignAssembly=false
 
       - name: Test
         if: ${{ !inputs.skipTests }}
