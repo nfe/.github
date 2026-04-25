@@ -238,8 +238,11 @@ jobs:
           # Write a Connect helper that every subsequent SF step dot-sources.
           # PowerShell session state doesn't persist across GitHub Actions
           # steps, so each SF cmdlet step must re-establish the cluster
-          # connection in its own process.
+          # connection in its own process. Import-Module loads the SF
+          # cmdlets via the WindowsCompatibility shim — pwsh doesn't
+          # auto-import Windows PowerShell-only modules.
           @'
+          Import-Module ServiceFabric -SkipEditionCheck
           Connect-ServiceFabricCluster `
             -ConnectionEndpoint $env:SF_ENDPOINT `
             -X509Credential `
@@ -407,15 +410,6 @@ jobs:
             throw "Upgrade ended in non-success state: $($u.UpgradeState)"
           }
 
-      - name: Cleanup certificate
-        if: always()
-        shell: pwsh
-        run: |
-          if ($env:THUMBPRINT) {
-            Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Thumbprint -eq $env:THUMBPRINT } | Remove-Item -Force
-          }
-          Remove-Item -Force "$env:RUNNER_TEMP/sfcluster.pfx" -ErrorAction SilentlyContinue
-
   rollback:
     needs: [build, deploy]
     if: |
@@ -445,6 +439,7 @@ jobs:
           "SF_SERVER_CERT_THUMBPRINT=${{ vars.SF_CLUSTER_SERVER_CERT_THUMBPRINT }}" | Out-File -FilePath $env:GITHUB_ENV -Append
 
           @'
+          Import-Module ServiceFabric -SkipEditionCheck
           Connect-ServiceFabricCluster `
             -ConnectionEndpoint $env:SF_ENDPOINT `
             -X509Credential `
@@ -507,12 +502,3 @@ jobs:
         run: |
           . $env:RUNNER_TEMP/sf-connect.ps1
           Unregister-ServiceFabricApplicationType -ApplicationTypeName $env:APP_TYPE_NAME -ApplicationTypeVersion $env:APP_TYPE_VERSION -Force
-
-      - name: Cleanup certificate
-        if: always()
-        shell: pwsh
-        run: |
-          if ($env:THUMBPRINT) {
-            Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Thumbprint -eq $env:THUMBPRINT } | Remove-Item -Force
-          }
-          Remove-Item -Force "$env:RUNNER_TEMP/sfcluster.pfx" -ErrorAction SilentlyContinue
