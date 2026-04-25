@@ -17,11 +17,6 @@ on:
         description: "Release tag prefix used to extract the version (e.g., 'v' for 'v1.0.0', 'addon-v' for 'addon-v1.2.3')"
         required: true
         type: string
-      nodeVersion:
-        description: "Node.js version (passed to actions/setup-node)"
-        required: false
-        type: string
-        default: "20"
       packageScope:
         description: "npm scope used to authenticate against GitHub Packages (e.g., '@nfe')"
         required: false
@@ -75,7 +70,7 @@ jobs:
         if: ${{ inputs.cacheDependencies }}
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ inputs.nodeVersion }}
+          node-version-file: .nvmrc
           registry-url: https://npm.pkg.github.com
           scope: ${{ inputs.packageScope }}
           cache: npm
@@ -85,7 +80,7 @@ jobs:
         if: ${{ !inputs.cacheDependencies }}
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ inputs.nodeVersion }}
+          node-version-file: .nvmrc
           registry-url: https://npm.pkg.github.com
           scope: ${{ inputs.packageScope }}
 
