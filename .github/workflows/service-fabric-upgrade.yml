@@ -155,8 +155,13 @@ jobs:
             $sm.Save($_.FullName)
           }
 
+      # SignAssembly=false bypasses dotnet msbuild's "PFX signing not
+      # supported on .NET Core" guard for any side-projects in the sln
+      # that opt into PFX signing. The SF artifact only ships the API
+      # output; signed deliverables (e.g., Dynamics plugins) are built
+      # by their own release workflows.
       - name: Build (dotnet msbuild)
-        run: dotnet msbuild "${{ inputs.solution }}" -t:Build -p:Configuration=Release /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
+        run: dotnet msbuild "${{ inputs.solution }}" -t:Build -p:Configuration=Release -p:SignAssembly=false /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
 
       - name: Package Service Fabric application
         run: dotnet msbuild "${{ inputs.sfproj }}" -t:Package -p:Configuration=Release -p:Platform=x64
