@@ -7,11 +7,6 @@ on:
         description: "Path to the .sln (or .csproj) file to build and test"
         required: true
         type: string
-      runner:
-        description: "Runner labels (JSON-array formatted string). Empty defaults to vars.RUNNER_LINUX."
-        required: false
-        type: string
-        default: ""
       skipTests:
         description: "Skip the dotnet test step (useful for projects without tests or with Windows-only / SF dependencies)"
         required: false
@@ -20,7 +15,7 @@ on:
 
 jobs:
   validate:
-    runs-on: ${{ fromJSON(inputs.runner != '' && inputs.runner || vars.RUNNER_LINUX) }}
+    runs-on: ${{ fromJSON(vars.RUNNER_LINUX) }}
     timeout-minutes: 15
     permissions:
       contents: read
