@@ -52,14 +52,14 @@ jobs:
         if: steps.detect.outputs.has_sfproj == 'true'
         uses: NuGet/setup-nuget@v2
 
-      - name: Restore (nuget CLI — packages.config / sfproj)
+      - name: Restore (nuget CLI)
         if: steps.detect.outputs.has_sfproj == 'true'
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: nuget restore "${{ inputs.solution }}"
 
-      - name: Restore (dotnet — SDK-style PackageReference)
+      - name: Restore (dotnet)
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
