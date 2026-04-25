@@ -35,14 +35,9 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Solutions that include a Service Fabric .sfproj contain TWO project
-      # styles that need different restore tools:
-      #   1. The .sfproj (and any other packages.config-based project) →
-      #      legacy `nuget restore` (handles packages.config + Microsoft.VisualStudio.Azure.Fabric.MSBuild).
-      #   2. The SDK-style .csproj with PackageReference →
-      #      `dotnet restore` (writes project.assets.json, needed for `dotnet build`).
-      # Pure PackageReference solutions only need step 2.
-      # We detect the .sfproj presence by grepping the .sln file.
+      # Hybrid SF solutions need both: nuget restore (packages.config) +
+      # dotnet restore (SDK-style PackageReference). Detect .sfproj to gate
+      # the nuget step.
       - name: Detect sfproj in solution
         id: detect
         shell: bash
