@@ -156,7 +156,7 @@ jobs:
           }
 
       - name: Build (dotnet msbuild)
-        run: dotnet msbuild "${{ inputs.solution }}" -t:Build -p:Configuration=Release /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
+        run: dotnet msbuild "${{ inputs.solution }}" -t:Build -p:Configuration=Release -p:SignAssembly=false /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
 
       - name: Package Service Fabric application
         run: dotnet msbuild "${{ inputs.sfproj }}" -t:Package -p:Configuration=Release -p:Platform=x64
