@@ -226,7 +226,7 @@ jobs:
           # WindowsCompatibility shim — pwsh doesn't auto-import
           # Windows PowerShell-only modules.
           @'
-          Import-Module ServiceFabric -SkipEditionCheck
+          Import-Module ServiceFabric -UseWindowsPowerShell -WarningAction SilentlyContinue
           Connect-ServiceFabricCluster `
             -ConnectionEndpoint $env:SF_ENDPOINT `
             -X509Credential `
@@ -434,7 +434,7 @@ jobs:
           "SF_SERVER_CERT_THUMBPRINT=${{ vars.SF_CLUSTER_SERVER_CERT_THUMBPRINT }}" | Out-File -FilePath $env:GITHUB_ENV -Append
 
           @'
-          Import-Module ServiceFabric -SkipEditionCheck
+          Import-Module ServiceFabric -UseWindowsPowerShell -WarningAction SilentlyContinue
           Connect-ServiceFabricCluster `
             -ConnectionEndpoint $env:SF_ENDPOINT `
             -X509Credential `
