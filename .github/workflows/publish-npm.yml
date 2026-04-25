@@ -17,11 +17,6 @@ on:
         description: "Release tag prefix used to extract the version (e.g., 'v' for 'v1.0.0', 'addon-v' for 'addon-v1.2.3')"
         required: true
         type: string
-      runner:
-        description: "Runner label to use"
-        required: false
-        type: string
-        default: ${{ vars.RUNNER_LINUX }}
       nodeVersion:
         description: "Node.js version (passed to actions/setup-node)"
         required: false
@@ -55,7 +50,7 @@ on:
 
 jobs:
   publish:
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ vars.RUNNER_LINUX }}
     timeout-minutes: 15
     permissions:
       contents: read

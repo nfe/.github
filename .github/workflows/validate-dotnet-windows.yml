@@ -1,4 +1,5 @@
-name: Validate .NET solution
+# Windows variant of validate-dotnet — required for projects that reference Microsoft.VisualStudio.Azure.Fabric.MSBuild or other Windows-only MSBuild SDKs (e.g., Service Fabric repos).
+name: Validate .NET solution (Windows)
 
 on:
   workflow_call:
@@ -15,7 +16,7 @@ on:
 
 jobs:
   validate:
-    runs-on: ${{ vars.RUNNER_LINUX }}
+    runs-on: ${{ vars.RUNNER_WINDOWS }}
     timeout-minutes: 15
     permissions:
       contents: read

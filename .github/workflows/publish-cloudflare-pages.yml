@@ -17,11 +17,6 @@ on:
         required: false
         type: string
         default: "main"
-      runner:
-        description: "Runner label to use"
-        required: false
-        type: string
-        default: ${{ vars.RUNNER_LINUX }}
       nodeVersion:
         description: "Node.js version"
         required: false
@@ -78,7 +73,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ vars.RUNNER_LINUX }}
     timeout-minutes: 15
     permissions:
       contents: read
