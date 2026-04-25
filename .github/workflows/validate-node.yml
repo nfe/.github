@@ -7,7 +7,7 @@ on:
         description: "Runner label to use (for example, ubuntu-latest or a self-hosted runner label)"
         required: false
         type: string
-        default: "ubuntu-latest"
+        default: ${{ vars.RUNNER_LINUX }}
       nodeVersion:
         description: "Node.js version (passed to actions/setup-node)"
         required: false

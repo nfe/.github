@@ -42,7 +42,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LINUX }}
     timeout-minutes: 25
     permissions:
       contents: read

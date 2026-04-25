@@ -11,7 +11,7 @@ on:
         description: "Runner label to use (for example, ubuntu-latest, windows-latest, or a self-hosted runner label)"
         required: false
         type: string
-        default: "ubuntu-latest"
+        default: ${{ vars.RUNNER_LINUX }}
       skipTests:
         description: "Skip the dotnet test step (useful for projects without tests or with Windows-only / SF dependencies)"
         required: false
