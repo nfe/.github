@@ -42,7 +42,7 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ vars.RUNNER_LINUX }}
+    runs-on: ${{ fromJSON(vars.RUNNER_LINUX) }}
     timeout-minutes: 25
     permissions:
       contents: read

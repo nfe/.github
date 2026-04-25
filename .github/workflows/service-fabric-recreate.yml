@@ -60,7 +60,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ${{ vars.RUNNER_WINDOWS }}
+    runs-on: ${{ fromJSON(vars.RUNNER_WINDOWS) }}
     timeout-minutes: 45
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -168,7 +168,7 @@ jobs:
   deploy:
     needs: build
     if: "!github.event.release.prerelease"
-    runs-on: ${{ vars.RUNNER_WINDOWS }}
+    runs-on: ${{ fromJSON(vars.RUNNER_WINDOWS) }}
     timeout-minutes: 60
     environment: ${{ inputs.appName }}-${{ inputs.stage }}
     permissions:
@@ -407,7 +407,7 @@ jobs:
       && needs.deploy.result != 'success'
       && needs.deploy.result != 'skipped'
       && !github.event.release.prerelease
-    runs-on: ${{ vars.RUNNER_WINDOWS }}
+    runs-on: ${{ fromJSON(vars.RUNNER_WINDOWS) }}
     timeout-minutes: 30
     environment: rollback-approval
     permissions:
