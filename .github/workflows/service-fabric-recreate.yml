@@ -125,7 +125,7 @@ jobs:
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: msbuild "${{ inputs.solution }}" -t:Restore;Build -p:RestorePackagesConfig=true -p:Configuration=Release /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
+        run: msbuild "${{ inputs.solution }}" -t:"Restore;Build" -p:RestorePackagesConfig=true -p:Configuration=Release /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
 
       - name: Package Service Fabric application
         run: msbuild "${{ inputs.sfproj }}" -t:Package -p:Configuration=Release -p:Platform=x64

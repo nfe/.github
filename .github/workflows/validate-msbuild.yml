@@ -52,8 +52,8 @@ jobs:
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: msbuild "${{ inputs.solution }}" -t:Restore;Build -p:RestorePackagesConfig=true -p:Configuration=Release
+        run: msbuild "${{ inputs.solution }}" -t:"Restore;Build" -p:RestorePackagesConfig=true -p:Configuration=Release
 
       - name: Test
         if: ${{ !inputs.skipTests }}
-        run: dotnet test "${{ inputs.solution }}" --no-build -c Release --logger "console;verbosity=minimal"
+        run: dotnet test "${{ inputs.solution }}" --no-build --no-restore -c Release --logger "console;verbosity=minimal"
