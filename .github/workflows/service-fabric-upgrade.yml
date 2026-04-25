@@ -111,6 +111,9 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Configure MSBuildSDKsPath
+        uses: nfe/.github/.github/actions/configure-msbuild-sdks-path@main
+
       - name: Stamp version in manifests
         shell: pwsh
         env:

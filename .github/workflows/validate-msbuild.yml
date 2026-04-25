@@ -48,6 +48,9 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Configure MSBuildSDKsPath
+        uses: nfe/.github/.github/actions/configure-msbuild-sdks-path@main
+
       - name: Restore + Build (msbuild)
         env:
           GITHUB_USERNAME: ${{ github.actor }}
