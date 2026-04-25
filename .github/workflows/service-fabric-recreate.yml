@@ -124,11 +124,18 @@ jobs:
             $sm.Save($_.FullName)
           }
 
-      - name: Restore
+      # nuget restore for packages.config / sfproj, dotnet restore for SDK-style.
+      - name: Restore (nuget CLI)
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: nuget restore "${{ inputs.solution }}"
+
+      - name: Restore (dotnet)
+        env:
+          GITHUB_USERNAME: ${{ github.actor }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dotnet restore "${{ inputs.solution }}"
 
       - name: Build solution
         run: dotnet build "${{ inputs.solution }}" -c Release --no-restore /p:Version=${{ steps.version.outputs.version }} /p:Deterministic=true
