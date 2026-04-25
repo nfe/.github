@@ -43,10 +43,16 @@ jobs:
       - name: Setup NuGet
         uses: NuGet/setup-nuget@v2
 
-      # nuget.exe restore handles both packages.config (legacy
-      # <repo>/packages folder) and PackageReference (drives MSBuild to
-      # generate project.assets.json). setup-msbuild above is what lets
-      # nuget find MSBuild for the PackageReference path.
+      # Two restores by design: dotnet handles PackageReference projects
+      # (writes obj/project.assets.json), nuget handles packages.config
+      # consumers (populates the legacy <repo>/packages folder that
+      # .sfproj's relative imports rely on).
+      - name: Restore (dotnet)
+        env:
+          GITHUB_USERNAME: ${{ github.actor }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dotnet restore "${{ inputs.solution }}"
+
       - name: Restore (nuget)
         env:
           GITHUB_USERNAME: ${{ github.actor }}
