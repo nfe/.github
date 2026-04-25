@@ -48,6 +48,19 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      # Point MSBuild at the .NET SDK's Sdks folder so it resolves
+      # Microsoft.NET.Sdk*. Standalone VS Build Tools' MSBuild only checks
+      # its bundled Sdks/ folder by default.
+      - name: Configure MSBuildSDKsPath
+        shell: pwsh
+        run: |
+          $sdkRoot = Join-Path $env:DOTNET_ROOT 'sdk'
+          $latest  = (Get-ChildItem $sdkRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          $sdks    = Join-Path $latest 'Sdks'
+          if (-not (Test-Path $sdks)) { throw "Sdks dir not found: $sdks" }
+          "MSBuildSDKsPath=$sdks" | Out-File -Append $env:GITHUB_ENV
+          Write-Host "MSBuildSDKsPath set to $sdks"
+
       - name: Restore + Build (msbuild)
         env:
           GITHUB_USERNAME: ${{ github.actor }}
