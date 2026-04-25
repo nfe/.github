@@ -37,12 +37,16 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
       - name: Setup NuGet
         uses: NuGet/setup-nuget@v2
 
-      # nuget.exe restore handles packages.config (legacy <repo>/packages
-      # folder layout) — needed because the dotnet/MSBuild restore writes
-      # only to the global cache and breaks .sfproj's relative imports.
+      # nuget.exe restore handles both packages.config (legacy
+      # <repo>/packages folder) and PackageReference (drives MSBuild to
+      # generate project.assets.json). setup-msbuild above is what lets
+      # nuget find MSBuild for the PackageReference path.
       - name: Restore (nuget)
         env:
           GITHUB_USERNAME: ${{ github.actor }}
