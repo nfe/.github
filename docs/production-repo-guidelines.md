@@ -259,7 +259,7 @@ Chame `nfe/.github/.github/workflows/validate-dotnet.yml` a partir de `.github/w
 
 ## 📌 Fixação de versões
 
-- **`package.json#engines.node`** — declare a versão do Node usada em runtime e passe a mesma via input `nodeVersion` nos workflows reutilizáveis.
+- **`.nvmrc`** na raiz do repositório — fonte única da verdade para a versão do Node, lida automaticamente pelos workflows reutilizáveis via `actions/setup-node`. Mantenha alinhada com `package.json#engines.node`.
 - **`package-lock.json`** commitado — `npm ci` (default nos reusables) exige lockfile. Em repositórios sem lockfile (ex.: addons Ember com `npm install` histórico), sobrescreva `installCommand: "npm install"` no caller.
 
 ## 📦 Pacotes privados

@@ -30,6 +30,17 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Detect .nvmrc
+        id: nvmrc
+        shell: bash
+        run: echo "found=$( [ -f .nvmrc ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        if: steps.nvmrc.outputs.found == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
       - name: Restore (dotnet)
         env:
           GITHUB_USERNAME: ${{ github.actor }}

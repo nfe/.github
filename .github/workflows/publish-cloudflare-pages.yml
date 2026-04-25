@@ -17,11 +17,6 @@ on:
         required: false
         type: string
         default: "main"
-      nodeVersion:
-        description: "Node.js version"
-        required: false
-        type: string
-        default: "20"
       packageScope:
         description: "npm scope used to authenticate against GitHub Packages"
         required: false
@@ -103,7 +98,7 @@ jobs:
         if: ${{ inputs.cacheDependencies }}
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ inputs.nodeVersion }}
+          node-version-file: .nvmrc
           registry-url: https://npm.pkg.github.com
           scope: ${{ inputs.packageScope }}
           cache: npm
@@ -112,7 +107,7 @@ jobs:
         if: ${{ !inputs.cacheDependencies }}
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ inputs.nodeVersion }}
+          node-version-file: .nvmrc
           registry-url: https://npm.pkg.github.com
           scope: ${{ inputs.packageScope }}
 

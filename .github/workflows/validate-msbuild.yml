@@ -37,6 +37,19 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Detect .nvmrc
+        id: nvmrc
+        shell: pwsh
+        run: |
+          $found = (Test-Path .nvmrc).ToString().ToLower()
+          "found=$found" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Setup Node.js
+        if: steps.nvmrc.outputs.found == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
