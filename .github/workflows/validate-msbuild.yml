@@ -19,11 +19,6 @@ on:
         required: false
         type: boolean
         default: false
-      submodules:
-        description: "Submodule checkout strategy passed to actions/checkout (false | true | recursive)"
-        required: false
-        type: string
-        default: "false"
 
 jobs:
   validate:
@@ -37,7 +32,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.submodules }}
+          submodules: recursive
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
