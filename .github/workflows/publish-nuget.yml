@@ -76,4 +76,4 @@ jobs:
       - name: Attach .nupkg to Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$GITHUB_REF_NAME" "$ARTIFACTS"/*.nupkg --clobber
+        run: gh release upload "$GITHUB_REF_NAME" "$ARTIFACTS"/*.nupkg --clobber --repo "$GITHUB_REPOSITORY"
