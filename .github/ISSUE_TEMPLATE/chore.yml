@@ -1,4 +1,5 @@
 name: "Chore / Task"
+type: "Task"
 description: "Trabalho operacional sem mudanca de produto visivel (migracoes, desligamentos, CI/CD)"
 body:
   - type: textarea

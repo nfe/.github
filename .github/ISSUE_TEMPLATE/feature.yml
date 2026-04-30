@@ -1,4 +1,5 @@
 name: "Feature"
+type: "Feature"
 description: "Nova funcionalidade visivel ao usuario/cliente"
 body:
   - type: textarea

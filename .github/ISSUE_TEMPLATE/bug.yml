@@ -1,4 +1,5 @@
 name: "Bug"
+type: "Bug"
 description: "Comportamento incorreto em codigo ja em producao"
 body:
   - type: textarea
