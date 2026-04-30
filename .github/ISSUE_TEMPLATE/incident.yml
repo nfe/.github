@@ -1,4 +1,5 @@
 name: "Incident"
+type: "Incident"
 description: "Resposta a incidente em producao ou postmortem"
 body:
   - type: textarea

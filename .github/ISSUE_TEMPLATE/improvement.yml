@@ -1,4 +1,5 @@
 name: "Improvement"
+type: "Improvement"
 description: "Melhoria mensuravel em algo ja existente (perf, UX, codigo)"
 body:
   - type: textarea

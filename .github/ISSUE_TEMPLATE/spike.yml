@@ -1,4 +1,5 @@
 name: "Spike"
+type: "Spike"
 description: "Investigacao com prazo definido — entrega em documento/ADR, nao codigo"
 body:
   - type: textarea
