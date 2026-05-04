@@ -67,10 +67,17 @@ jobs:
         run: dotnet restore "${{ inputs.solution }}"
 
       - name: Restore (nuget)
+        shell: pwsh
         env:
           GITHUB_USERNAME: ${{ github.actor }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: nuget restore "${{ inputs.solution }}"
+        run: |
+          # Point nuget's bundled MSBuild to the .NET SDK Sdks folder so it can
+          # resolve Microsoft.NET.Sdk / Microsoft.NET.Sdk.Web for SDK-style projects
+          # regardless of which .NET major version is installed.
+          $sdkVersion = dotnet --version
+          $env:MSBuildSDKsPath = Join-Path $env:DOTNET_ROOT "sdk\$sdkVersion\Sdks"
+          nuget restore "${{ inputs.solution }}"
 
       # SignAssembly=false bypasses the .NET Core MSBuild guard that
       # rejects PFX signing. PR validation only needs to compile-check;
