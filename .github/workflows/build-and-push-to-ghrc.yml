@@ -1,0 +1,117 @@
+name: Build and push container to GHCR (CI)
+
+on:
+  workflow_call:
+    inputs:
+      imageName:
+        description: "Image name under ghcr.io/<owner>/ (e.g., dfetech-xml2pdf-api)"
+        required: true
+        type: string
+      dockerfilePath:
+        description: "Path to Dockerfile relative to repo root"
+        required: true
+        type: string
+        default: "Dockerfile"
+      dockerContext:
+        description: "Docker build context relative to repo root"
+        required: false
+        type: string
+        default: "."
+      dockerfileTarget:
+        description: "Target stage in a multi-stage Dockerfile (passed to docker/build-push-action `target`). Empty = no target."
+        required: false
+        type: string
+        default: ""
+      buildArgs:
+        description: "Extra build args for docker build, one `KEY=VALUE` per line (passed as `build-args`). Empty = none."
+        required: false
+        type: string
+        default: ""
+      semverPattern:
+        description: "SemVer pattern for tag-triggered builds (passed to docker/metadata-action). Use '{{version}}' to strip 'v' prefix."
+        required: false
+        type: string
+        default: "{{version}}"
+    outputs:
+      version:
+        description: "Semantic version (e.g. '1.2.3'), or '0.0.0' on non-release builds. Use this as the Dockerfile VERSION build arg."
+        value: ${{ jobs.build.outputs.version }}
+      tags:
+        description: "Full newline-separated list of all tags pushed (e.g. 'staging\\nsha-abc1234'). Use this to select a tag for deployment."
+        value: ${{ jobs.build.outputs.tags }}
+      image:
+        description: "Full image repository without tag (e.g., ghcr.io/nfe/dfetech-xml2pdf-api)"
+        value: ${{ jobs.build.outputs.image }}
+      digest:
+        description: "Image digest of the pushed manifest (sha256:...)"
+        value: ${{ jobs.build.outputs.digest }}
+
+jobs:
+  build:
+    runs-on: ${{ fromJSON(vars.RUNNER_LINUX) }}
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      tags: ${{ steps.meta.outputs.tags }}
+      image: ${{ env.IMAGE }}
+      digest: ${{ steps.push.outputs.digest }}
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.imageName }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=pr,prefix=pr-
+            type=ref,event=branch
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern=${{ inputs.semverPattern }}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Resolve build version
+        id: version
+        run: |
+          ver="${{ steps.meta.outputs.version }}"
+          if [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+].+)?$ ]]; then
+            echo "value=$ver" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=0.0.0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.dockerContext }}
+          file: ${{ inputs.dockerfilePath }}
+          target: ${{ inputs.dockerfileTarget }}
+          push: true
+          build-args: |
+            VERSION=${{ steps.version.outputs.value }}
+            GITHUB_USERNAME=${{ github.actor }}
+            ${{ inputs.buildArgs }}
+          secrets: |
+            github_packages_token=${{ secrets.GITHUB_TOKEN }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
